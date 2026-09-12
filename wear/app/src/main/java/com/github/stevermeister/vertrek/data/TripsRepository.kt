@@ -17,6 +17,8 @@ private object PreferenceKeys {
     val DIRECTION_OVERRIDE = stringPreferencesKey("direction_override")
 
     fun cache(direction: Direction) = stringPreferencesKey("cache_${direction.paramValue}")
+
+    fun lastFailure(direction: Direction) = stringPreferencesKey("last_failure_${direction.paramValue}")
 }
 
 /**
@@ -49,6 +51,22 @@ class TripsRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun saveCached(direction: Direction, data: CachedTripsData) {
         dataStore.edit { prefs ->
             prefs[PreferenceKeys.cache(direction)] = json.encodeToString(data)
+        }
+    }
+
+    suspend fun getLastFailureReason(direction: Direction): NoDataReason? {
+        val raw = dataStore.data.first()[PreferenceKeys.lastFailure(direction)] ?: return null
+        return runCatching { NoDataReason.valueOf(raw) }.getOrNull()
+    }
+
+    /** Pass null to clear it — that's what a successful fetch does. */
+    suspend fun setLastFailureReason(direction: Direction, reason: NoDataReason?) {
+        dataStore.edit { prefs ->
+            if (reason == null) {
+                prefs.remove(PreferenceKeys.lastFailure(direction))
+            } else {
+                prefs[PreferenceKeys.lastFailure(direction)] = reason.name
+            }
         }
     }
 }

@@ -26,3 +26,5 @@ fun resolveDirection(override: Direction?, clock: Clock): Direction {
     if (override != null) return override
     return if (LocalTime.now(clock).isBefore(DIRECTION_SWITCH_TIME)) Direction.AB else Direction.BA
 }
+
+fun Direction.opposite(): Direction = if (this == Direction.AB) Direction.BA else Direction.AB

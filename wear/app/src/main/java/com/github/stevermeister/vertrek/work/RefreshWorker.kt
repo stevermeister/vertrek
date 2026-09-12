@@ -1,6 +1,7 @@
 package com.github.stevermeister.vertrek.work
 
 import android.content.Context
+import androidx.wear.tiles.TileService
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
@@ -12,11 +13,13 @@ import androidx.work.WorkerParameters
 import com.github.stevermeister.vertrek.BuildConfig
 import com.github.stevermeister.vertrek.data.CachedTripsData
 import com.github.stevermeister.vertrek.data.KtorWorkerClient
+import com.github.stevermeister.vertrek.data.NoDataReason
 import com.github.stevermeister.vertrek.data.TripsRepository
 import com.github.stevermeister.vertrek.data.WorkerOutcome
 import com.github.stevermeister.vertrek.data.createWorkerHttpClient
 import com.github.stevermeister.vertrek.data.resolveDirection
 import com.github.stevermeister.vertrek.data.tripsDataStore
+import com.github.stevermeister.vertrek.tile.VertrekTileService
 import java.time.Clock
 import kotlinx.coroutines.CancellationException
 
@@ -46,26 +49,41 @@ class RefreshWorker(
                     httpClient.close()
                 }
 
-            when (outcome) {
-                is WorkerOutcome.Success -> {
-                    repository.saveCached(
-                        direction,
-                        CachedTripsData(
-                            direction = direction.paramValue,
-                            trips = outcome.response.trips,
-                            fetchedAtEpochMillis = System.currentTimeMillis(),
-                        ),
-                    )
-                    Result.success()
+            val result =
+                when (outcome) {
+                    is WorkerOutcome.Success -> {
+                        repository.setLastFailureReason(direction, null)
+                        repository.saveCached(
+                            direction,
+                            CachedTripsData(
+                                direction = direction.paramValue,
+                                trips = outcome.response.trips,
+                                fetchedAtEpochMillis = System.currentTimeMillis(),
+                            ),
+                        )
+                        Result.success()
+                    }
+                    is WorkerOutcome.Unauthorized, is WorkerOutcome.ServerMisconfigured -> {
+                        repository.setLastFailureReason(direction, NoDataReason.AUTH_REJECTED)
+                        Result.failure()
+                    }
+                    is WorkerOutcome.HttpError -> {
+                        repository.setLastFailureReason(direction, NoDataReason.NETWORK_DOWN)
+                        Result.failure()
+                    }
+                    is WorkerOutcome.NetworkFailure -> {
+                        repository.setLastFailureReason(direction, NoDataReason.NETWORK_DOWN)
+                        // A network hiccup is worth WorkManager's own retry; the
+                        // others won't fix themselves by retrying immediately.
+                        Result.retry()
+                    }
                 }
-                // A network hiccup is worth WorkManager's own retry; a bad
-                // key or a misconfigured Worker won't fix itself by retrying.
-                is WorkerOutcome.NetworkFailure -> Result.retry()
-                is WorkerOutcome.Unauthorized,
-                is WorkerOutcome.ServerMisconfigured,
-                is WorkerOutcome.HttpError,
-                -> Result.failure()
+
+            if (outcome is WorkerOutcome.Success) {
+                TileService.getUpdater(applicationContext).requestUpdate(VertrekTileService::class.java)
             }
+
+            result
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

@@ -61,4 +61,18 @@ class TripsRepositoryTest {
         repository.setDirectionOverride(null)
         assertNull(repository.getDirectionOverride())
     }
+
+    @Test
+    fun `last failure reason round-trips, is per-direction, and clears`() = runTest {
+        val repository = newRepository()
+
+        assertNull(repository.getLastFailureReason(Direction.AB))
+
+        repository.setLastFailureReason(Direction.AB, NoDataReason.AUTH_REJECTED)
+        assertEquals(NoDataReason.AUTH_REJECTED, repository.getLastFailureReason(Direction.AB))
+        assertNull(repository.getLastFailureReason(Direction.BA)) // other direction untouched
+
+        repository.setLastFailureReason(Direction.AB, null)
+        assertNull(repository.getLastFailureReason(Direction.AB))
+    }
 }
