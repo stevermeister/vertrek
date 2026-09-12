@@ -4,6 +4,10 @@ export interface Env {
   STATION_A: string;
   STATION_B: string;
   NS_API_KEY: string;
+  // Shared secret the watch app sends as X-Vertrek-Key. Optional in the
+  // type because an operator can forget to set it — see src/auth.ts,
+  // which fails closed (500) rather than treating that as "no auth".
+  VERTREK_KEY?: string;
 }
 
 export interface CompactTrip {

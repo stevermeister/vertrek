@@ -18,5 +18,13 @@
     "STATION_A": "ASD",
     "STATION_B": "UT"
   }
-  // Secret NS_API_KEY is set separately via `wrangler secret put NS_API_KEY` — never store it here.
+  // Two secrets are set separately via `wrangler secret put` — never store
+  // them here:
+  //   NS_API_KEY   — your NS reisinformatie-api subscription key.
+  //   VERTREK_KEY  — a secret YOU make up. The watch app must send it back
+  //                  as the X-Vertrek-Key header on every call, or the
+  //                  Worker rejects the request (401), and if this secret
+  //                  isn't set at all, the Worker rejects EVERY request
+  //                  (500) rather than serving them unauthenticated.
+  //                  See README Setup step 2.
 }

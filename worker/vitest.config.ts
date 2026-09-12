@@ -6,7 +6,7 @@ export default defineWorkersConfig({
       workers: {
         wrangler: { configPath: "./wrangler.jsonc" },
         miniflare: {
-          bindings: { NS_API_KEY: "test-key" },
+          bindings: { NS_API_KEY: "test-key", VERTREK_KEY: "test-vertrek-key" },
         },
       },
     },

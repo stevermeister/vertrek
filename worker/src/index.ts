@@ -1,3 +1,4 @@
+import { checkVertrekKey } from "./auth";
 import { fetchTrips, NsApiError, toCompactTrips, type Env } from "./ns";
 
 const MAX_TRIPS = 3;
@@ -11,6 +12,12 @@ export default {
 
     if (url.pathname !== "/next") {
       return jsonError(404, "NOT_FOUND", "Unknown path. Use GET /next?dir=ab|ba.");
+    }
+
+    // Auth first: no cache lookup, no upstream call, for any rejection.
+    const auth = checkVertrekKey(request, env);
+    if (!auth.ok) {
+      return jsonError(auth.status, auth.code, auth.message);
     }
 
     if (request.method !== "GET") {

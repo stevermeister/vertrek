@@ -89,6 +89,26 @@ npx wrangler secret put NS_API_KEY
 # paste your Ocp-Apim-Subscription-Key value when prompted
 ```
 
+**Also set `VERTREK_KEY` — this is not optional.** The Worker's `/next`
+endpoint requires a matching `X-Vertrek-Key` header on every request; if
+`VERTREK_KEY` isn't set, the Worker refuses *every* request with `500`
+(it fails closed, not open — it will not silently serve trips to anyone
+who finds your `workers.dev` URL). Make up your own secret value — it
+doesn't come from NS, it's just a shared secret between your Worker and
+your watch app:
+
+```bash
+npx wrangler secret put VERTREK_KEY
+# paste a random value you generate yourself, e.g.:
+openssl rand -hex 32
+```
+
+You'll enter this same value into the watch app's `local.properties` as
+`VERTREK_API_KEY` (see Part 2 setup) so it can send it back as
+`X-Vertrek-Key`. If you skip this step, expect every request to
+`/next` to come back `500 SERVER_MISCONFIGURED` — that's the Worker
+telling you the secret isn't set, not a bug.
+
 Deploy:
 
 ```bash
@@ -104,9 +124,14 @@ committed):
 
 ```
 NS_API_KEY=your-local-dev-key
+VERTREK_KEY=your-local-dev-vertrek-key
 ```
 
-Run it locally with `npm run dev`, then `curl "http://localhost:8787/next?dir=ab"`.
+Run it locally with `npm run dev`, then:
+
+```bash
+curl -H "X-Vertrek-Key: your-local-dev-vertrek-key" "http://localhost:8787/next?dir=ab"
+```
 
 ### 3. Build and sideload the watch app
 
@@ -120,7 +145,13 @@ module exists.
 
 ```
 GET /next?dir=ab|ba
+X-Vertrek-Key: <your VERTREK_KEY secret>
 ```
+
+Every request must include a valid `X-Vertrek-Key` header — see Setup
+step 2. Missing, empty, or wrong key: `401`. `VERTREK_KEY` not configured
+on the Worker at all: `500` (fails closed, never open). Neither case
+calls the NS API.
 
 `dir=ab` is `STATION_A` → `STATION_B`, `dir=ba` is the reverse. Returns up
 to 3 upcoming trips, cached for 30 seconds per `dir`:
@@ -141,10 +172,12 @@ to 3 upcoming trips, cached for 30 seconds per `dir`:
 }
 ```
 
-On an NS API failure, it responds `502` with a machine-readable body:
+All error responses are machine-readable JSON:
 
 ```json
-{ "error": { "code": "NS_API_UNAVAILABLE", "message": "..." } }
+{ "error": { "code": "UNAUTHORIZED", "message": "..." } }         // 401
+{ "error": { "code": "SERVER_MISCONFIGURED", "message": "..." } } // 500
+{ "error": { "code": "NS_API_UNAVAILABLE", "message": "..." } }   // 502
 ```
 
 ## Development
