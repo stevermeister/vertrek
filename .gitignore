@@ -1,0 +1,44 @@
+# --- Secrets & machine-local config (never commit) ---
+.dev.vars
+.env
+.env.*
+local.properties
+*.keystore
+*.jks
+keystore.properties
+
+# --- Node / Cloudflare Worker ---
+node_modules/
+.wrangler/
+worker/dist/
+worker-configuration.d.ts
+# Personal deploy config (your real stations) — see README Setup step 2.
+# wrangler.jsonc in the repo keeps placeholder example stations only.
+worker/wrangler.local.jsonc
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --- Android / Gradle (Wear OS app) ---
+*.iml
+.gradle/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+.idea/
+*.hprof
+.navigation/
+/wear/build/
+/wear/release/
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+*.swp
+
+# --- Local Claude Code settings (personal, not part of the template) ---
+.claude/settings.local.json

@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "vertrek-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    // NS station codes. dir=ab means STATION_A -> STATION_B, dir=ba is the
+    // reverse. These are PLACEHOLDER EXAMPLE codes (Amsterdam Centraal /
+    // Utrecht Centraal), not a real commute. Look up your own codes at
+    // https://www.ns.nl/stationsinformatie
+    //
+    // Don't edit these in place if you plan to keep pulling repo updates —
+    // instead copy this file to wrangler.local.jsonc (gitignored) and set
+    // your real stations there; see README Setup step 2.
+    "STATION_A": "ASD",
+    "STATION_B": "UT"
+  }
+  // Secret NS_API_KEY is set separately via `wrangler secret put NS_API_KEY` — never store it here.
+}

@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  worker:
+    name: Worker (typecheck + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm test
+
+      # Intentionally NOT run in CI: `npm run verify:live` — it calls the
+      # real NS API and needs a personal NS_API_KEY. Run it locally/manually.
