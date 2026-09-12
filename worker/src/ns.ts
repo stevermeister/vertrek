@@ -8,6 +8,9 @@ export interface Env {
   // type because an operator can forget to set it — see src/auth.ts,
   // which fails closed (500) rather than treating that as "no auth".
   VERTREK_KEY?: string;
+  // How many upcoming trips to return. Wrangler vars are always strings;
+  // parsed with a default in index.ts's resolveMaxTrips().
+  MAX_TRIPS?: string;
 }
 
 export interface CompactTrip {
@@ -36,10 +39,20 @@ export async function fetchTrips(
   env: Env,
   fromStation: string,
   toStation: string,
+  maxTrips: number,
 ): Promise<NsTripsResponse> {
   const url = new URL(NS_TRIPS_URL);
   url.searchParams.set("fromStation", fromStation);
   url.searchParams.set("toStation", toStation);
+  // previousAdvices/nextAdvices are documented (via third-party clients —
+  // NS's own portal docs require a login we don't have, see README) as
+  // MINIMUM counts before/after the search time, not an exact total. We
+  // want only upcoming trips, hence previousAdvices=0. There's no
+  // confirmed hard max; a real production v3 client uses nextAdvices=8.
+  // Verify this empirically against your own key with `npm run verify:live`
+  // if NS ever changes this behavior.
+  url.searchParams.set("previousAdvices", "0");
+  url.searchParams.set("nextAdvices", String(maxTrips));
 
   let response: Response;
   try {

@@ -166,6 +166,114 @@
           }
         }
       ]
+    },
+    {
+      "uid": "trip-5",
+      "plannedDurationInMinutes": 28,
+      "actualDurationInMinutes": 28,
+      "transfers": 0,
+      "status": "NORMAL",
+      "optimal": false,
+      "legs": [
+        {
+          "idx": "0",
+          "name": "IC 2740",
+          "cancelled": false,
+          "direction": "Utrecht Centraal",
+          "origin": {
+            "name": "Amsterdam Centraal",
+            "plannedDateTime": "2026-11-02T13:03:00+0100",
+            "actualDateTime": "2026-11-02T13:03:00+0100",
+            "plannedTrack": "4b",
+            "actualTrack": "4b"
+          },
+          "destination": {
+            "name": "Utrecht Centraal",
+            "plannedDateTime": "2026-11-02T13:31:00+0100",
+            "actualDateTime": "2026-11-02T13:31:00+0100",
+            "plannedTrack": "18",
+            "actualTrack": "18"
+          },
+          "product": {
+            "displayName": "Intercity",
+            "type": "TRAIN",
+            "number": "2740",
+            "operatorName": "NS"
+          }
+        }
+      ]
+    },
+    {
+      "uid": "trip-6",
+      "plannedDurationInMinutes": 28,
+      "actualDurationInMinutes": 28,
+      "transfers": 0,
+      "status": "NORMAL",
+      "optimal": false,
+      "legs": [
+        {
+          "idx": "0",
+          "name": "IC 2742",
+          "cancelled": false,
+          "direction": "Utrecht Centraal",
+          "origin": {
+            "name": "Amsterdam Centraal",
+            "plannedDateTime": "2026-11-02T13:18:00+0100",
+            "actualDateTime": "2026-11-02T13:18:00+0100",
+            "plannedTrack": "4b",
+            "actualTrack": "4b"
+          },
+          "destination": {
+            "name": "Utrecht Centraal",
+            "plannedDateTime": "2026-11-02T13:46:00+0100",
+            "actualDateTime": "2026-11-02T13:46:00+0100",
+            "plannedTrack": "18",
+            "actualTrack": "18"
+          },
+          "product": {
+            "displayName": "Intercity",
+            "type": "TRAIN",
+            "number": "2742",
+            "operatorName": "NS"
+          }
+        }
+      ]
+    },
+    {
+      "uid": "trip-7",
+      "plannedDurationInMinutes": 28,
+      "actualDurationInMinutes": 28,
+      "transfers": 0,
+      "status": "NORMAL",
+      "optimal": false,
+      "legs": [
+        {
+          "idx": "0",
+          "name": "IC 2744",
+          "cancelled": false,
+          "direction": "Utrecht Centraal",
+          "origin": {
+            "name": "Amsterdam Centraal",
+            "plannedDateTime": "2026-11-02T13:33:00+0100",
+            "actualDateTime": "2026-11-02T13:33:00+0100",
+            "plannedTrack": "4b",
+            "actualTrack": "4b"
+          },
+          "destination": {
+            "name": "Utrecht Centraal",
+            "plannedDateTime": "2026-11-02T14:01:00+0100",
+            "actualDateTime": "2026-11-02T14:01:00+0100",
+            "plannedTrack": "18",
+            "actualTrack": "18"
+          },
+          "product": {
+            "displayName": "Intercity",
+            "type": "TRAIN",
+            "number": "2744",
+            "operatorName": "NS"
+          }
+        }
+      ]
     }
   ]
 }

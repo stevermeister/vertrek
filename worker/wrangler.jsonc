@@ -16,7 +16,14 @@
     // instead copy this file to wrangler.local.jsonc (gitignored) and set
     // your real stations there; see README Setup step 2.
     "STATION_A": "ASD",
-    "STATION_B": "UT"
+    "STATION_B": "UT",
+    // Trips returned per request. NS's previousAdvices/nextAdvices params
+    // are documented (via third-party clients — NS's own portal requires a
+    // login we don't have) as MINIMUMS, not an exact count, and no hard
+    // maximum is confirmed. If you raise this and `npm run verify:live`
+    // shows fewer trips coming back than expected, that's the NS API's
+    // behavior to investigate, not a bug in this Worker.
+    "MAX_TRIPS": "6"
   }
   // Two secrets are set separately via `wrangler secret put` — never store
   // them here:

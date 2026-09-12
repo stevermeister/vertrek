@@ -154,7 +154,8 @@ on the Worker at all: `500` (fails closed, never open). Neither case
 calls the NS API.
 
 `dir=ab` is `STATION_A` → `STATION_B`, `dir=ba` is the reverse. Returns up
-to 3 upcoming trips, cached for 30 seconds per `dir`:
+to `MAX_TRIPS` upcoming trips (a `wrangler.jsonc` var, default 6), cached
+for 30 seconds per `dir`:
 
 ```json
 {

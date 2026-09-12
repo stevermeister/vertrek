@@ -1,7 +1,7 @@
 import { checkVertrekKey } from "./auth";
 import { fetchTrips, NsApiError, toCompactTrips, type Env } from "./ns";
 
-const MAX_TRIPS = 3;
+const DEFAULT_MAX_TRIPS = 6;
 const CACHE_TTL_SECONDS = 30;
 
 type Direction = "ab" | "ba";
@@ -43,11 +43,12 @@ export default {
     }
 
     const { from, to } = resolveStations(env, dir);
+    const maxTrips = resolveMaxTrips(env);
 
     let compactTrips;
     try {
-      const nsResponse = await fetchTrips(env, from, to);
-      compactTrips = toCompactTrips(nsResponse, MAX_TRIPS);
+      const nsResponse = await fetchTrips(env, from, to, maxTrips);
+      compactTrips = toCompactTrips(nsResponse, maxTrips);
     } catch (err) {
       if (err instanceof NsApiError) {
         return jsonError(502, "NS_API_UNAVAILABLE", err.message, {
@@ -69,6 +70,11 @@ export default {
     return response;
   },
 } satisfies ExportedHandler<Env>;
+
+function resolveMaxTrips(env: Env): number {
+  const parsed = Number(env.MAX_TRIPS);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_TRIPS;
+}
 
 function resolveStations(env: Env, dir: Direction): { from: string; to: string } {
   return dir === "ab"

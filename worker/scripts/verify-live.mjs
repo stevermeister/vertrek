@@ -63,11 +63,18 @@ function main() {
     return Promise.resolve();
   }
 
+  const maxTrips = Number(process.env.MAX_TRIPS ?? "6");
+
   const url = new URL(NS_TRIPS_URL);
   url.searchParams.set("fromStation", fromStation);
   url.searchParams.set("toStation", toStation);
+  url.searchParams.set("previousAdvices", "0");
+  url.searchParams.set("nextAdvices", String(maxTrips));
 
-  console.log(`Checking live schema: GET ${url.pathname}?fromStation=${fromStation}&toStation=${toStation}`);
+  console.log(
+    `Checking live schema: GET ${url.pathname}?fromStation=${fromStation}&toStation=${toStation}` +
+      `&previousAdvices=0&nextAdvices=${maxTrips}`,
+  );
 
   return fetch(url.toString(), {
     headers: {
@@ -111,7 +118,14 @@ function main() {
         });
       });
 
-      console.log(`Trips returned: ${trips.length}`);
+      console.log(`Trips returned: ${trips.length} (requested nextAdvices=${maxTrips})`);
+      if (trips.length < maxTrips) {
+        console.log(
+          `Fewer trips than requested — could be genuinely no more trains soon, or NS's ` +
+            `nextAdvices may not behave as documented (see the comment above fetchTrips() in ` +
+            `src/ns.ts). Re-run at a busier time of day before assuming the latter.`,
+        );
+      }
 
       if (missing.length === 0) {
         console.log("No required fields missing — src/ns-types.ts still matches.");
