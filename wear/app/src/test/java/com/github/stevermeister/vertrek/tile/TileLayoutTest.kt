@@ -6,11 +6,14 @@ import androidx.wear.protolayout.DimensionBuilders
 import androidx.wear.protolayout.LayoutElementBuilders
 import androidx.wear.protolayout.testing.LayoutElementAssertionsProvider
 import androidx.wear.protolayout.testing.LayoutElementMatcher
+import androidx.wear.protolayout.testing.hasChild
+import androidx.wear.protolayout.testing.hasDescendant
 import com.github.stevermeister.vertrek.data.CacheState
 import com.github.stevermeister.vertrek.data.CachedTripsData
 import com.github.stevermeister.vertrek.data.Direction
 import com.github.stevermeister.vertrek.data.NoDataReason
 import com.github.stevermeister.vertrek.data.TripDto
+import com.github.stevermeister.vertrek.data.formattedDepartureTime
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -58,6 +61,14 @@ class TileLayoutTest {
             height?.value == 1f
         }
 
+    // Binds the check to one specific row: the strikethrough overlay Box
+    // (the one with a 1dp line as a *direct* child) must also carry that
+    // row's own departure time somewhere in its subtree. A matcher that
+    // only asked "does a line exist anywhere" would pass even if the line
+    // rendered on the wrong row entirely.
+    private fun hasStrikethroughOverlayFor(trip: TripDto): LayoutElementMatcher =
+        hasDescendant(containsText(trip.formattedDepartureTime())).and(hasChild(isStrikethroughLine()))
+
     // Row 1 (index 0) deliberately has no delay: per spec, "+N" is only
     // rendered for rows 2-3, so a delay on row 1 wouldn't appear as text
     // anywhere and would be the wrong thing for this test to assert on.
@@ -96,6 +107,25 @@ class TileLayoutTest {
             fetchedAtEpochMillis = Instant.parse("2026-11-02T11:00:00Z").toEpochMilli(),
         )
 
+    // Two cancelled trips among five, non-adjacent (rows 1 and 3 of 0..4),
+    // so a strikethrough that leaks onto a neighbouring row would actually
+    // get caught rather than being indistinguishable from the right answer.
+    private fun sampleDataWithNonAdjacentCancellations(): CachedTripsData =
+        CachedTripsData(
+            direction = "ab",
+            fromStationName = "Almere Oostvaarders",
+            toStationName = "Amsterdam Centraal",
+            trips =
+                listOf(
+                    TripDto("2026-11-02T11:07:00Z", "2026-11-02T11:40:00Z", 0, "4b", false, "UNKNOWN"),
+                    TripDto("2026-11-02T11:18:00Z", "2026-11-02T11:46:00Z", 0, "2", true, "UNKNOWN"),
+                    TripDto("2026-11-02T11:33:00Z", "2026-11-02T12:12:00Z", 0, "3", false, "UNKNOWN"),
+                    TripDto("2026-11-02T11:48:00Z", "2026-11-02T12:20:00Z", 0, "1", true, "UNKNOWN"),
+                    TripDto("2026-11-02T12:03:00Z", "2026-11-02T12:41:00Z", 0, "4b", false, "UNKNOWN"),
+                ),
+            fetchedAtEpochMillis = Instant.parse("2026-11-02T11:00:00Z").toEpochMilli(),
+        )
+
     private fun layoutFor(direction: Direction, cacheState: CacheState) =
         buildTileLayout(context, roundDevice, direction, cacheState, clock)
 
@@ -121,9 +151,15 @@ class TileLayoutTest {
     }
 
     @Test
-    fun `cancelled row renders a strikethrough overlay line`() {
-        val layout = layoutFor(Direction.AB, CacheState.Fresh(sampleData()))
-        LayoutElementAssertionsProvider(layout).onElement(isStrikethroughLine()).assertExists()
+    fun `strikethrough overlay lands exactly on cancelled rows, never on their neighbours`() {
+        val data = sampleDataWithNonAdjacentCancellations()
+        val layout = layoutFor(Direction.AB, CacheState.Fresh(data))
+        val provider = LayoutElementAssertionsProvider(layout)
+
+        data.trips.forEach { trip ->
+            val assertion = provider.onElement(hasStrikethroughOverlayFor(trip))
+            if (trip.cancelled) assertion.assertExists() else assertion.assertDoesNotExist()
+        }
     }
 
     @Test
