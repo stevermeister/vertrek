@@ -1,6 +1,8 @@
 package com.github.stevermeister.vertrek.data
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -13,29 +15,30 @@ class TripsRepositoryTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
 
-    private fun newRepository(): TripsRepository {
-        val dataStore =
-            PreferenceDataStoreFactory.create(
-                produceFile = { tempFolder.newFile("test-${System.nanoTime()}.preferences_pb") },
-            )
-        return TripsRepository(dataStore)
-    }
+    private fun newDataStore() =
+        PreferenceDataStoreFactory.create(
+            produceFile = { tempFolder.newFile("test-${System.nanoTime()}.preferences_pb") },
+        )
+
+    private fun newRepository(): TripsRepository = TripsRepository(newDataStore())
 
     @Test
-    fun `cache round-trips through DataStore`() = runTest {
+    fun `cache round-trips through DataStore, including the current schema version`() = runTest {
         val repository = newRepository()
         val data =
             CachedTripsData(
                 direction = "ab",
+                fromStationName = "Almere Oostvaarders",
+                toStationName = "Amsterdam Centraal",
                 trips =
                     listOf(
                         TripDto(
                             departureTime = "2026-11-02T12:08:00+0100",
+                            arrivalTime = "2026-11-02T12:36:00+0100",
                             delayMinutes = 5,
                             track = "4b",
-                            durationMinutes = 33,
-                            transfers = 0,
                             cancelled = false,
+                            crowdForecast = "MEDIUM",
                         ),
                     ),
                 fetchedAtEpochMillis = 1_700_000_000_000L,
@@ -45,8 +48,28 @@ class TripsRepositoryTest {
 
         repository.saveCached(Direction.AB, data)
 
-        assertEquals(data, repository.getCached(Direction.AB))
+        val roundTripped = repository.getCached(Direction.AB)
+        assertEquals(data.copy(schemaVersion = CACHE_SCHEMA_VERSION), roundTripped)
         assertNull(repository.getCached(Direction.BA)) // a different direction's cache is untouched
+    }
+
+    @Test
+    fun `an old-shape cached payload is discarded without throwing`() = runTest {
+        val dataStore = newDataStore()
+        val repository = TripsRepository(dataStore)
+
+        // The pre-redesign shape: no schemaVersion, no fromStationName/
+        // toStationName/arrivalTime/crowdForecast, and it still has the
+        // now-removed durationMinutes/transfers fields.
+        val oldShapeJson =
+            """
+            {"direction":"ab","trips":[{"departureTime":"2026-11-02T12:08:00+0100","delayMinutes":5,"track":"4b","durationMinutes":33,"transfers":0,"cancelled":false}],"fetchedAtEpochMillis":1700000000000}
+            """.trimIndent()
+
+        dataStore.edit { prefs -> prefs[stringPreferencesKey("cache_ab")] = oldShapeJson }
+
+        // Must not throw — discarded as if there were no cache at all.
+        assertNull(repository.getCached(Direction.AB))
     }
 
     @Test

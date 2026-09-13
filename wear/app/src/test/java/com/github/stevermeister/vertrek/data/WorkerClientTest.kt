@@ -35,7 +35,10 @@ class WorkerClientTest {
         val engine = MockEngine {
             callCount++
             if (callCount == 1) throw IOException("simulated network failure")
-            jsonResponse(HttpStatusCode.OK, """{"dir":"ab","trips":[]}""")
+            jsonResponse(
+                HttpStatusCode.OK,
+                """{"dir":"ab","fromStationName":"Almere Oostvaarders","toStationName":"Amsterdam Centraal","trips":[]}""",
+            )
         }
 
         val outcome = clientWith(engine).fetchNext(Direction.AB)
@@ -108,24 +111,28 @@ class WorkerClientTest {
         val engine = MockEngine {
             jsonResponse(
                 HttpStatusCode.OK,
-                """{"dir":"ab","trips":[{"departureTime":"2026-11-02T12:08:00+0100","delayMinutes":5,"track":"4b","durationMinutes":33,"transfers":0,"cancelled":false}]}""",
+                """{"dir":"ab","fromStationName":"Almere Oostvaarders","toStationName":"Amsterdam Centraal",""" +
+                    """"trips":[{"departureTime":"2026-11-02T12:08:00+0100","arrivalTime":"2026-11-02T12:41:00+0100",""" +
+                    """"delayMinutes":5,"track":"4b","cancelled":false,"crowdForecast":"MEDIUM"}]}""",
             )
         }
 
         val outcome = clientWith(engine).fetchNext(Direction.AB)
 
         assertTrue(outcome is WorkerOutcome.Success)
-        val trip = (outcome as WorkerOutcome.Success).response.trips.single()
+        val response = (outcome as WorkerOutcome.Success).response
+        assertEquals("Almere Oostvaarders", response.fromStationName)
+        assertEquals("Amsterdam Centraal", response.toStationName)
         assertEquals(
             TripDto(
                 departureTime = "2026-11-02T12:08:00+0100",
+                arrivalTime = "2026-11-02T12:41:00+0100",
                 delayMinutes = 5,
                 track = "4b",
-                durationMinutes = 33,
-                transfers = 0,
                 cancelled = false,
+                crowdForecast = "MEDIUM",
             ),
-            trip,
+            response.trips.single(),
         )
     }
 }

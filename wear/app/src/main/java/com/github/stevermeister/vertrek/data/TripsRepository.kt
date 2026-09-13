@@ -50,18 +50,28 @@ class TripsRepository(private val dataStore: DataStore<Preferences>) {
 
     suspend fun getCached(direction: Direction): CachedTripsData? {
         val raw = dataStore.data.first()[PreferenceKeys.cache(direction)] ?: return null
-        return runCatching { json.decodeFromString<CachedTripsData>(raw) }.getOrNull()
+        return decodeIfCurrentSchema(raw)
     }
 
     fun observeCached(direction: Direction): Flow<CachedTripsData?> =
-        dataStore.data.map { prefs ->
-            prefs[PreferenceKeys.cache(direction)]
-                ?.let { raw -> runCatching { json.decodeFromString<CachedTripsData>(raw) }.getOrNull() }
-        }
+        dataStore.data.map { prefs -> prefs[PreferenceKeys.cache(direction)]?.let { decodeIfCurrentSchema(it) } }
+
+    /**
+     * Decoding never throws even for a pre-versioning or otherwise
+     * old-shape payload (TripDto/CachedTripsData's new fields all have
+     * defaults), but an old payload's schemaVersion will never equal
+     * CACHE_SCHEMA_VERSION (it defaults to 0, a sentinel that never
+     * matches), so it's discarded here rather than trusted.
+     */
+    private fun decodeIfCurrentSchema(raw: String): CachedTripsData? {
+        val decoded = runCatching { json.decodeFromString<CachedTripsData>(raw) }.getOrNull() ?: return null
+        return decoded.takeIf { it.schemaVersion == CACHE_SCHEMA_VERSION }
+    }
 
     suspend fun saveCached(direction: Direction, data: CachedTripsData) {
+        val versioned = data.copy(schemaVersion = CACHE_SCHEMA_VERSION)
         dataStore.edit { prefs ->
-            prefs[PreferenceKeys.cache(direction)] = json.encodeToString(data)
+            prefs[PreferenceKeys.cache(direction)] = json.encodeToString(versioned)
         }
     }
 

@@ -14,9 +14,13 @@ private val DISPLAY_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPatt
 fun TripDto.parsedDepartureInstant(): Instant? =
     runCatching { OffsetDateTime.parse(departureTime, DEPARTURE_TIME_PARSER).toInstant() }.getOrNull()
 
-fun TripDto.formattedDepartureTime(): String =
+fun TripDto.formattedDepartureTime(): String = formatIsoTime(departureTime)
+
+fun TripDto.formattedArrivalTime(): String = formatIsoTime(arrivalTime)
+
+private fun formatIsoTime(iso: String): String =
     runCatching {
-        OffsetDateTime.parse(departureTime, DEPARTURE_TIME_PARSER)
+        OffsetDateTime.parse(iso, DEPARTURE_TIME_PARSER)
             .atZoneSameInstant(ZoneId.systemDefault())
             .format(DISPLAY_TIME_FORMATTER)
     }.getOrDefault("--:--")

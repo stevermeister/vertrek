@@ -57,6 +57,8 @@ class RefreshWorker(
                             direction,
                             CachedTripsData(
                                 direction = direction.paramValue,
+                                fromStationName = outcome.response.fromStationName,
+                                toStationName = outcome.response.toStationName,
                                 trips = outcome.response.trips,
                                 fetchedAtEpochMillis = System.currentTimeMillis(),
                             ),
