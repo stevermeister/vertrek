@@ -6,8 +6,6 @@ import androidx.wear.tiles.TileBuilders
 import androidx.wear.tiles.TileService
 import com.github.stevermeister.vertrek.data.TripsRepository
 import com.github.stevermeister.vertrek.data.cacheStateOf
-import com.github.stevermeister.vertrek.data.opposite
-import com.github.stevermeister.vertrek.data.resolveDirection
 import com.github.stevermeister.vertrek.data.tripsDataStore
 import com.github.stevermeister.vertrek.work.RefreshWorker
 import com.google.common.util.concurrent.Futures
@@ -32,14 +30,16 @@ class VertrekTileService : TileService() {
 
         // Synchronous, off the local DataStore cache only — no network here.
         val currentOverride = runBlocking { repository.getDirectionOverride() }
-        val currentDirection = resolveDirection(currentOverride, clock)
+        val lastClickableId = requestParams.currentState.lastClickableId
+        val effectiveDirection = resolveEffectiveDirection(lastClickableId, currentOverride, clock)
 
-        val swapRequested = requestParams.currentState.lastClickableId == SWAP_CLICKABLE_ID
-        val effectiveDirection = if (swapRequested) currentDirection.opposite() else currentDirection
-
-        if (swapRequested) {
+        val desiredDirection = desiredDirectionFromClickableId(lastClickableId)
+        if (desiredDirection != null) {
             // Persisted asynchronously, outside this request's return path.
-            ioScope.launch { repository.setDirectionOverride(effectiveDirection) }
+            // The id names an absolute direction, so replaying a stale id
+            // on a later, tap-less request just re-persists the same
+            // value — it can never flip the direction on its own.
+            ioScope.launch { repository.setDirectionOverride(desiredDirection) }
         }
 
         RefreshWorker.enqueue(applicationContext)

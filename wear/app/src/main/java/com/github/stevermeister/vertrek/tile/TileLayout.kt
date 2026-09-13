@@ -24,14 +24,12 @@ import com.github.stevermeister.vertrek.data.CachedTripsData
 import com.github.stevermeister.vertrek.data.Direction
 import com.github.stevermeister.vertrek.data.NoDataReason
 import com.github.stevermeister.vertrek.data.TripDto
+import com.github.stevermeister.vertrek.data.opposite
 import java.time.Clock
 import java.time.Duration
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-
-/** Id of the header's swap Clickable — read back via TileRequest.currentState.lastClickableId. */
-const val SWAP_CLICKABLE_ID = "swap_direction"
 
 private val DEPARTURE_TIME_PARSER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXX")
 private val DISPLAY_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
@@ -69,8 +67,10 @@ private fun MaterialScope.header(direction: Direction, cacheState: CacheState, c
         }
 
     // No onClick lambda: a LoadAction re-invokes onTileRequest, which reads
-    // this id back from currentState.lastClickableId.
-    val swapClickable = clickable(action = loadAction(), id = SWAP_CLICKABLE_ID)
+    // this id back from currentState.lastClickableId. The id names the
+    // target direction (not "swap") so a replayed/stale id is idempotent —
+    // see SwapDirection.kt.
+    val swapClickable = clickable(action = loadAction(), id = swapClickableId(direction.opposite()))
 
     return LayoutElementBuilders.Row.Builder()
         .setWidth(DimensionBuilders.expand())
