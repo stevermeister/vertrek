@@ -63,17 +63,18 @@ function main() {
     return Promise.resolve();
   }
 
-  const maxTrips = Number(process.env.MAX_TRIPS ?? "6");
+  // nextAdvices is deliberately not sent — confirmed decommissioned live
+  // (see the comment above fetchTrips() in src/ns.ts). 5 is NS's own
+  // per-call cap, not something MAX_TRIPS can raise.
+  const maxTrips = Number(process.env.MAX_TRIPS ?? "5");
 
   const url = new URL(NS_TRIPS_URL);
   url.searchParams.set("fromStation", fromStation);
   url.searchParams.set("toStation", toStation);
   url.searchParams.set("previousAdvices", "0");
-  url.searchParams.set("nextAdvices", String(maxTrips));
 
   console.log(
-    `Checking live schema: GET ${url.pathname}?fromStation=${fromStation}&toStation=${toStation}` +
-      `&previousAdvices=0&nextAdvices=${maxTrips}`,
+    `Checking live schema: GET ${url.pathname}?fromStation=${fromStation}&toStation=${toStation}&previousAdvices=0`,
   );
 
   return fetch(url.toString(), {
@@ -118,12 +119,11 @@ function main() {
         });
       });
 
-      console.log(`Trips returned: ${trips.length} (requested nextAdvices=${maxTrips})`);
-      if (trips.length < maxTrips) {
+      console.log(`Trips returned: ${trips.length} (MAX_TRIPS=${maxTrips}, NS's own cap is 5 regardless)`);
+      if (trips.length < Math.min(maxTrips, 5)) {
         console.log(
-          `Fewer trips than requested — could be genuinely no more trains soon, or NS's ` +
-            `nextAdvices may not behave as documented (see the comment above fetchTrips() in ` +
-            `src/ns.ts). Re-run at a busier time of day before assuming the latter.`,
+          "Fewer than 5 trips — likely genuinely no more trains running soon for this route " +
+            "right now, not a bug. Re-run at a busier time of day to double-check.",
         );
       }
 

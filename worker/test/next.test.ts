@@ -102,7 +102,7 @@ describe("GET /next auth", () => {
 });
 
 describe("GET /next", () => {
-  it("returns up to 6 compact trips for dir=ab, using the recorded NS fixture", async () => {
+  it("returns up to 5 compact trips for dir=ab, using the recorded NS fixture", async () => {
     mockNsTrips(env.STATION_A, env.STATION_B, fixture);
 
     const response = await authedFetch("https://worker.example/next?dir=ab");
@@ -110,8 +110,8 @@ describe("GET /next", () => {
 
     const json = await response.json<{ dir: string; trips: unknown[] }>();
     expect(json.dir).toBe("ab");
-    // The fixture has 7 trips — this proves the cap still trims, not just that 6 fit.
-    expect(json.trips).toHaveLength(6);
+    // The fixture has 7 trips — this proves the cap still trims, not just that 5 fit.
+    expect(json.trips).toHaveLength(5);
 
     const [first, second] = json.trips as Array<Record<string, unknown>>;
 
@@ -134,7 +134,7 @@ describe("GET /next", () => {
     });
   });
 
-  it("asks NS for previousAdvices=0 and nextAdvices matching MAX_TRIPS", async () => {
+  it("asks NS for previousAdvices=0 and does NOT send nextAdvices (confirmed decommissioned live)", async () => {
     let capturedPath: string | undefined;
     fetchMock
       .get("https://gateway.apiportal.ns.nl")
@@ -152,7 +152,7 @@ describe("GET /next", () => {
     await authedFetch("https://worker.example/next?dir=ab");
 
     expect(capturedPath).toContain("previousAdvices=0");
-    expect(capturedPath).toContain(`nextAdvices=${env.MAX_TRIPS}`);
+    expect(capturedPath).not.toContain("nextAdvices");
   });
 
   it("swaps stations for dir=ba", async () => {

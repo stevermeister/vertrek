@@ -39,9 +39,11 @@ import com.github.stevermeister.vertrek.ui.TripsUiState
 import com.github.stevermeister.vertrek.ui.TripsViewModel
 import com.github.stevermeister.vertrek.work.RefreshWorker
 
-// Matches the Worker's MAX_TRIPS (worker/wrangler.jsonc), which is the
-// real ceiling on how many trips the cache can ever contain.
-private const val MAX_ROWS_SHOWN = 6
+// Matches the Worker's MAX_TRIPS (worker/wrangler.jsonc), which is NS's
+// own per-call cap on this endpoint — not a number either side can raise
+// without a second NS API call (deliberately not implemented; see the
+// comment above fetchTrips() in worker/src/ns.ts).
+private const val MAX_ROWS_SHOWN = 5
 
 /** Tap target for the tile — shows the full list of upcoming trips. */
 class MainActivity : ComponentActivity() {

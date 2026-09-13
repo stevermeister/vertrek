@@ -21,6 +21,11 @@ never will (pull requests adding these will be declined):
 - bus, tram, or metro departures — NS trains only
 - an iOS app
 - support for more than one commute route per deployment
+- pagination beyond the first 5 trips — that's NS's own per-call cap on
+  this endpoint (`previousAdvices`/`nextAdvices` are decommissioned, not
+  usable to raise it); getting more would cost a second NS API call per
+  request via the response's scroll context, which we've deliberately
+  not built
 
 If you want any of the above, this repo is a fine starting point to fork
 and extend, but that's a different project from what's here.
@@ -243,7 +248,8 @@ on the Worker at all: `500` (fails closed, never open). Neither case
 calls the NS API.
 
 `dir=ab` is `STATION_A` → `STATION_B`, `dir=ba` is the reverse. Returns up
-to `MAX_TRIPS` upcoming trips (a `wrangler.jsonc` var, default 6), cached
+to `MAX_TRIPS` upcoming trips (a `wrangler.jsonc` var, default and NS's
+own hard cap 5 — see Non-goals), cached
 for 30 seconds per `dir`:
 
 ```json

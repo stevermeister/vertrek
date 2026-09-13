@@ -35,24 +35,28 @@ export class NsApiError extends Error {
 const NS_TRIPS_URL =
   "https://gateway.apiportal.ns.nl/reisinformatie-api/api/v3/trips";
 
+// NOTE: 5 trips per call is an NS-side cap, not a choice we make here.
+// Verified live against a real subscription key (2026-09-13): nextAdvices
+// and previousAdvices are confirmed decommissioned on this endpoint —
+// every tested value from 0 to 20 for either param still returned exactly
+// 5 trips. Neither is sent below; sending nextAdvices would just be noise.
+//
+// The response does carry a real, working pagination mechanism —
+// scrollRequestForwardContext — which a second call could pass back as a
+// `context` param to fetch more trips with zero overlap. We deliberately
+// did not implement this: it would double NS API calls (and latency, and
+// failure surface) per /next request just to get more than 5 trips. If
+// that trade-off ever looks worth it, that's where to start.
 export async function fetchTrips(
   env: Env,
   fromStation: string,
   toStation: string,
-  maxTrips: number,
 ): Promise<NsTripsResponse> {
   const url = new URL(NS_TRIPS_URL);
   url.searchParams.set("fromStation", fromStation);
   url.searchParams.set("toStation", toStation);
-  // previousAdvices/nextAdvices are documented (via third-party clients —
-  // NS's own portal docs require a login we don't have, see README) as
-  // MINIMUM counts before/after the search time, not an exact total. We
-  // want only upcoming trips, hence previousAdvices=0. There's no
-  // confirmed hard max; a real production v3 client uses nextAdvices=8.
-  // Verify this empirically against your own key with `npm run verify:live`
-  // if NS ever changes this behavior.
+  // We only want upcoming trips, never ones before the search time.
   url.searchParams.set("previousAdvices", "0");
-  url.searchParams.set("nextAdvices", String(maxTrips));
 
   let response: Response;
   try {

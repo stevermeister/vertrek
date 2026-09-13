@@ -1,7 +1,7 @@
 import { checkVertrekKey } from "./auth";
 import { fetchTrips, NsApiError, toCompactTrips, type Env } from "./ns";
 
-const DEFAULT_MAX_TRIPS = 6;
+const DEFAULT_MAX_TRIPS = 5;
 const CACHE_TTL_SECONDS = 30;
 
 type Direction = "ab" | "ba";
@@ -47,7 +47,7 @@ export default {
 
     let compactTrips;
     try {
-      const nsResponse = await fetchTrips(env, from, to, maxTrips);
+      const nsResponse = await fetchTrips(env, from, to);
       compactTrips = toCompactTrips(nsResponse, maxTrips);
     } catch (err) {
       if (err instanceof NsApiError) {

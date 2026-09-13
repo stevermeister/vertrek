@@ -17,13 +17,14 @@
     // your real stations there; see README Setup step 2.
     "STATION_A": "ASD",
     "STATION_B": "UT",
-    // Trips returned per request. NS's previousAdvices/nextAdvices params
-    // are documented (via third-party clients — NS's own portal requires a
-    // login we don't have) as MINIMUMS, not an exact count, and no hard
-    // maximum is confirmed. If you raise this and `npm run verify:live`
-    // shows fewer trips coming back than expected, that's the NS API's
-    // behavior to investigate, not a bug in this Worker.
-    "MAX_TRIPS": "6"
+    // Trips returned per request. 5 is NS's own per-call cap on this
+    // endpoint (verified live against a real key — previousAdvices/
+    // nextAdvices are decommissioned and do not raise it). Getting more
+    // than 5 would need a second NS call per request via the response's
+    // scrollRequestForwardContext, which we've deliberately not built —
+    // see the comment above fetchTrips() in worker/src/ns.ts. Raising this
+    // above 5 will not get you more trips.
+    "MAX_TRIPS": "5"
   }
   // Two secrets are set separately via `wrangler secret put` — never store
   // them here:
