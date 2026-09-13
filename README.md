@@ -150,21 +150,18 @@ Create `wear/local.properties` (gitignored, never committed):
 sdk.dir=/path/to/your/Android/sdk
 NS_WORKER_BASE_URL=https://your-worker-name.your-subdomain.workers.dev
 VERTREK_API_KEY=the-same-value-you-set-as-the-Worker-secret-VERTREK_KEY
-STATION_A=ALMO
-STATION_B=ASD
 ```
 
-All four are read into `BuildConfig` at build time — never hardcoded in
-source:
+Both are read into `BuildConfig` at build time — never hardcoded in
+source. They're where the app sends requests and the key it
+authenticates with. Must match your deployed Worker's URL and its
+`VERTREK_KEY` secret exactly, or every request comes back `401`.
 
-- `NS_WORKER_BASE_URL` / `VERTREK_API_KEY` — where the app sends requests
-  and the key it authenticates with. Must match your deployed Worker's
-  URL and its `VERTREK_KEY` secret exactly, or every request comes back
-  `401`.
-- `STATION_A` / `STATION_B` — **display-only**. The Worker resolves
-  stations server-side; the app never sends these anywhere. They only
-  drive the header label (e.g. "ALMO → ASD"). Default to "A"/"B" if
-  omitted, so a fresh checkout still builds.
+Station display names (e.g. "Almere Oostvaarders → Amsterdam
+Centraal") aren't build config — they come from the Worker's `/next`
+response, which resolves them server-side from your `STATION_A`/
+`STATION_B` codes (see step 2). The app never configures or sends
+station codes itself.
 
 Build a debug APK:
 
@@ -255,18 +252,26 @@ for 30 seconds per `dir`:
 ```json
 {
   "dir": "ab",
+  "fromStationName": "Almere Oostvaarders",
+  "toStationName": "Amsterdam Centraal",
   "trips": [
     {
       "departureTime": "2026-11-02T12:08:00+0100",
+      "arrivalTime": "2026-11-02T12:41:00+0100",
       "delayMinutes": 5,
       "track": "4b",
-      "durationMinutes": 33,
-      "transfers": 0,
-      "cancelled": false
+      "cancelled": false,
+      "crowdForecast": "MEDIUM"
     }
   ]
 }
 ```
+
+`fromStationName`/`toStationName` are the full display names, resolved
+server-side from the trip response — the watch app renders these
+directly and never sees `STATION_A`/`STATION_B`. `crowdForecast` is
+`LOW` | `MEDIUM` | `HIGH` | `UNKNOWN`: the NS API reports it per leg,
+so multi-leg trips are reduced to their busiest leg.
 
 All error responses are machine-readable JSON:
 
