@@ -169,6 +169,34 @@ cd wear
 # output: app/build/outputs/apk/debug/app-debug.apk
 ```
 
+#### Signed release build (optional, for a longer-lived sideload)
+
+Generate a local keystore once (never commit it — already gitignored):
+
+```bash
+cd wear
+keytool -genkeypair -v -keystore vertrek-release.keystore -alias vertrek \
+  -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Create `wear/keystore.properties` (gitignored) pointing at it:
+
+```properties
+storeFile=vertrek-release.keystore
+storePassword=your-store-password
+keyAlias=vertrek
+keyPassword=your-key-password
+```
+
+```bash
+./gradlew assembleRelease
+# output: app/build/outputs/apk/release/app-release.apk
+```
+
+Without `keystore.properties`, `assembleRelease` still succeeds but
+produces an unsigned APK — fine for `./gradlew test`/CI, not installable
+on a device.
+
 #### Install on a Galaxy Watch over wireless debugging
 
 On the watch: **Settings → About watch → tap "Software version" 7

@@ -16,6 +16,15 @@ val localProperties = Properties().apply {
     }
 }
 
+// Local release-signing keystore, never committed. See README Setup step 3.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) {
+        FileInputStream(file).use { load(it) }
+    }
+}
+val hasReleaseKeystore = keystoreProperties.containsKey("storeFile")
+
 android {
     namespace = "com.github.stevermeister.vertrek"
     compileSdk = 37
@@ -52,9 +61,26 @@ android {
         )
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+            // Without keystore.properties, assembleRelease still produces an
+            // unsigned APK rather than failing — only sideloading needs a
+            // signature, and ./gradlew test/assembleDebug shouldn't require one.
         }
     }
 
