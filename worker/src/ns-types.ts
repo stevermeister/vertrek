@@ -40,6 +40,12 @@ export interface NsLeg {
     number: string;
     operatorName: string;
   };
+  // Verified live (2026-09-13): crowdForecast is a string enum ("LOW" seen;
+  // "MEDIUM"/"HIGH" documented by NS, not observed live) and lives on the
+  // leg, not just the trip (NsTrip.crowdForecast above also exists but we
+  // deliberately don't use it — see the comment above reduceCrowdForecast
+  // in src/ns.ts).
+  crowdForecast?: string;
 }
 
 export interface NsStopInfo {

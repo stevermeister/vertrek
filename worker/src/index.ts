@@ -1,5 +1,5 @@
 import { checkVertrekKey } from "./auth";
-import { fetchTrips, NsApiError, toCompactTrips, type Env } from "./ns";
+import { extractStationNames, fetchTrips, NsApiError, toCompactTrips, type Env } from "./ns";
 
 const DEFAULT_MAX_TRIPS = 5;
 const CACHE_TTL_SECONDS = 30;
@@ -46,9 +46,11 @@ export default {
     const maxTrips = resolveMaxTrips(env);
 
     let compactTrips;
+    let stationNames;
     try {
       const nsResponse = await fetchTrips(env, from, to);
       compactTrips = toCompactTrips(nsResponse, maxTrips);
+      stationNames = extractStationNames(nsResponse, from, to);
     } catch (err) {
       if (err instanceof NsApiError) {
         return jsonError(502, "NS_API_UNAVAILABLE", err.message, {
@@ -58,13 +60,21 @@ export default {
       return jsonError(502, "NS_API_UNAVAILABLE", (err as Error).message);
     }
 
-    const response = new Response(JSON.stringify({ dir, trips: compactTrips }), {
-      status: 200,
-      headers: {
-        "content-type": "application/json",
-        "cache-control": `public, max-age=${CACHE_TTL_SECONDS}`,
+    const response = new Response(
+      JSON.stringify({
+        dir,
+        fromStationName: stationNames.fromStationName,
+        toStationName: stationNames.toStationName,
+        trips: compactTrips,
+      }),
+      {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "cache-control": `public, max-age=${CACHE_TTL_SECONDS}`,
+        },
       },
-    });
+    );
 
     await cache.put(cacheKey, response.clone());
     return response;

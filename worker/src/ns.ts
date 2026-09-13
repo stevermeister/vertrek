@@ -13,13 +13,15 @@ export interface Env {
   MAX_TRIPS?: string;
 }
 
+export type CrowdForecast = "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
+
 export interface CompactTrip {
   departureTime: string;
+  arrivalTime: string;
   delayMinutes: number;
   track: string | null;
-  durationMinutes: number;
-  transfers: number;
   cancelled: boolean;
+  crowdForecast: CrowdForecast;
 }
 
 export class NsApiError extends Error {
@@ -110,23 +112,77 @@ export function toCompactTrips(
   return response.trips.slice(0, limit).map(toCompactTrip);
 }
 
-function toCompactTrip(trip: NsTrip): CompactTrip {
-  const firstLeg = trip.legs[0] as NsLeg | undefined;
-  const origin = firstLeg?.origin;
-
-  const plannedTime = origin?.plannedDateTime;
-  const actualTime = origin?.actualDateTime ?? plannedTime;
+/**
+ * Full display names for the header (e.g. "Almere Oostvaarders"), read
+ * from the NS response itself rather than hardcoded anywhere — the
+ * Worker only ever configures station *codes*. Falls back to the codes
+ * we queried with if there are no trips to read names from (e.g. no
+ * service running right now); a code is a degraded but honest display
+ * name, never a crash.
+ */
+export function extractStationNames(
+  response: NsTripsResponse,
+  fallbackFromCode: string,
+  fallbackToCode: string,
+): { fromStationName: string; toStationName: string } {
+  const firstTrip = response.trips[0];
+  const firstLeg = firstTrip?.legs[0] as NsLeg | undefined;
+  const lastLeg = firstTrip?.legs[firstTrip.legs.length - 1] as NsLeg | undefined;
 
   return {
-    departureTime: actualTime ?? new Date(0).toISOString(),
-    delayMinutes: computeDelayMinutes(plannedTime, origin?.actualDateTime),
-    track: origin?.actualTrack ?? origin?.plannedTrack ?? null,
-    durationMinutes: Math.round(
-      trip.actualDurationInMinutes ?? trip.plannedDurationInMinutes,
-    ),
-    transfers: trip.transfers,
-    cancelled: trip.status === "CANCELLED" || trip.legs.some((l) => l.cancelled),
+    fromStationName: firstLeg?.origin.name ?? fallbackFromCode,
+    toStationName: lastLeg?.destination.name ?? fallbackToCode,
   };
+}
+
+function toCompactTrip(trip: NsTrip): CompactTrip {
+  const firstLeg = trip.legs[0] as NsLeg | undefined;
+  const lastLeg = trip.legs[trip.legs.length - 1] as NsLeg | undefined;
+  const origin = firstLeg?.origin;
+  const destination = lastLeg?.destination;
+
+  const plannedDeparture = origin?.plannedDateTime;
+  const actualDeparture = origin?.actualDateTime ?? plannedDeparture;
+  const actualArrival = destination?.actualDateTime ?? destination?.plannedDateTime;
+
+  return {
+    departureTime: actualDeparture ?? new Date(0).toISOString(),
+    arrivalTime: actualArrival ?? new Date(0).toISOString(),
+    delayMinutes: computeDelayMinutes(plannedDeparture, origin?.actualDateTime),
+    track: origin?.actualTrack ?? origin?.plannedTrack ?? null,
+    cancelled: trip.status === "CANCELLED" || trip.legs.some((l) => l.cancelled),
+    crowdForecast: reduceCrowdForecast(trip.legs),
+  };
+}
+
+const CROWD_SEVERITY: Record<CrowdForecast, number> = {
+  UNKNOWN: 0,
+  LOW: 1,
+  MEDIUM: 2,
+  HIGH: 3,
+};
+
+function parseCrowdForecast(value: string | undefined): CrowdForecast {
+  return value === "LOW" || value === "MEDIUM" || value === "HIGH" ? value : "UNKNOWN";
+}
+
+/**
+ * crowdForecast lives on each leg, not the trip (NsTrip.crowdForecast
+ * exists too, verified live, but we deliberately don't trust it — it's
+ * undocumented whether it's NS's own rollup of the same legs or something
+ * else, and reisinformatie-api's OpenAPI spec isn't reachable to check).
+ * For a multi-leg trip we report the single busiest leg: a traveler cares
+ * about the most crowded segment of their journey, not an average.
+ */
+function reduceCrowdForecast(legs: NsLeg[]): CrowdForecast {
+  let busiest: CrowdForecast = "UNKNOWN";
+  for (const leg of legs) {
+    const forecast = parseCrowdForecast(leg.crowdForecast);
+    if (CROWD_SEVERITY[forecast] > CROWD_SEVERITY[busiest]) {
+      busiest = forecast;
+    }
+  }
+  return busiest;
 }
 
 function computeDelayMinutes(

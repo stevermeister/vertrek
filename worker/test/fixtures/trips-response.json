@@ -33,7 +33,8 @@
             "type": "TRAIN",
             "number": "2734",
             "operatorName": "NS"
-          }
+          },
+          "crowdForecast": "MEDIUM"
         }
       ]
     },
@@ -101,7 +102,8 @@
             "type": "TRAIN",
             "number": "5512",
             "operatorName": "NS"
-          }
+          },
+          "crowdForecast": "LOW"
         },
         {
           "idx": "1",
@@ -127,7 +129,8 @@
             "type": "TRAIN",
             "number": "9911",
             "operatorName": "NS"
-          }
+          },
+          "crowdForecast": "HIGH"
         }
       ]
     },
@@ -235,7 +238,8 @@
             "type": "TRAIN",
             "number": "2742",
             "operatorName": "NS"
-          }
+          },
+          "crowdForecast": "UNRECOGNIZED_FUTURE_VALUE"
         }
       ]
     },

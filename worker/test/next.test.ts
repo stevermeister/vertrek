@@ -108,8 +108,17 @@ describe("GET /next", () => {
     const response = await authedFetch("https://worker.example/next?dir=ab");
     expect(response.status).toBe(200);
 
-    const json = await response.json<{ dir: string; trips: unknown[] }>();
+    const json = await response.json<{
+      dir: string;
+      fromStationName: string;
+      toStationName: string;
+      trips: unknown[];
+    }>();
     expect(json.dir).toBe("ab");
+    // Read from the fixture's own legs, not hardcoded — proves these come
+    // from the NS response, not from any Worker-side station config.
+    expect(json.fromStationName).toBe("Amsterdam Centraal");
+    expect(json.toStationName).toBe("Utrecht Centraal");
     // The fixture has 7 trips — this proves the cap still trims, not just that 5 fit.
     expect(json.trips).toHaveLength(5);
 
@@ -117,21 +126,62 @@ describe("GET /next", () => {
 
     expect(first).toEqual({
       departureTime: "2026-11-02T12:08:00+0100",
+      arrivalTime: "2026-11-02T12:36:00+0100",
       delayMinutes: 5,
       track: "4b",
-      durationMinutes: 33,
-      transfers: 0,
       cancelled: false,
+      crowdForecast: "MEDIUM",
     });
 
     expect(second).toEqual({
       departureTime: "2026-11-02T12:18:00+0100",
+      arrivalTime: "2026-11-02T12:46:00+0100",
       delayMinutes: 0,
       track: "4b",
-      durationMinutes: 28,
-      transfers: 0,
       cancelled: true,
+      crowdForecast: "UNKNOWN",
     });
+  });
+
+  it("reduces a multi-leg trip's crowdForecast to its busiest leg", async () => {
+    mockNsTrips(env.STATION_A, env.STATION_B, fixture);
+
+    const response = await authedFetch("https://worker.example/next?dir=ab");
+    const json = await response.json<{ trips: Array<{ crowdForecast: string }> }>();
+
+    // trip-3 (index 2): leg 0 is LOW, leg 1 is HIGH -> busiest is HIGH.
+    expect(json.trips[2]?.crowdForecast).toBe("HIGH");
+  });
+
+  it("maps a missing crowdForecast field to UNKNOWN", async () => {
+    mockNsTrips(env.STATION_A, env.STATION_B, fixture);
+
+    const response = await authedFetch("https://worker.example/next?dir=ab");
+    const json = await response.json<{ trips: Array<{ crowdForecast: string }> }>();
+
+    // trip-4 (index 3) has no crowdForecast field on its only leg at all.
+    expect(json.trips[3]?.crowdForecast).toBe("UNKNOWN");
+  });
+
+  it("maps an unrecognised crowdForecast value to UNKNOWN rather than passing it through", async () => {
+    mockNsTrips(env.STATION_A, env.STATION_B, fixture);
+
+    const response = await authedFetch("https://worker.example/next?dir=ab");
+    const json = await response.json<{ trips: Array<{ crowdForecast: string }> }>();
+
+    // trip-6 (index 4 after the 5-trip cap — trips 0..4 of the 7 in the
+    // fixture) carries "UNRECOGNIZED_FUTURE_VALUE" on its leg.
+    expect(json.trips[4]?.crowdForecast).toBe("UNKNOWN");
+  });
+
+  it("falls back to the requested station codes as names when there are no trips to read names from", async () => {
+    mockNsTrips(env.STATION_A, env.STATION_B, { source: "TEST", trips: [] });
+
+    const response = await authedFetch("https://worker.example/next?dir=ab");
+    const json = await response.json<{ fromStationName: string; toStationName: string }>();
+
+    expect(json.fromStationName).toBe(env.STATION_A);
+    expect(json.toStationName).toBe(env.STATION_B);
   });
 
   it("asks NS for previousAdvices=0 and does NOT send nextAdvices (confirmed decommissioned live)", async () => {
