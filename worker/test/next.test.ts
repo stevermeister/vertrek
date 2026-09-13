@@ -169,8 +169,12 @@ describe("GET /next", () => {
     const response = await authedFetch("https://worker.example/next?dir=ab");
     const json = await response.json<{ trips: Array<{ crowdForecast: string }> }>();
 
-    // trip-6 (index 4 after the 5-trip cap — trips 0..4 of the 7 in the
-    // fixture) carries "UNRECOGNIZED_FUTURE_VALUE" on its leg.
+    // trip-5 (index 4, the last trip inside the 5-trip cap) carries
+    // "UNRECOGNIZED_FUTURE_VALUE" on its leg. It must land here, not on
+    // trip-6/7 which the cap excludes entirely — otherwise this test
+    // would pass without ever exercising the defensive-parsing branch
+    // (as it previously did: it was silently testing the "missing field"
+    // path a second time).
     expect(json.trips[4]?.crowdForecast).toBe("UNKNOWN");
   });
 
