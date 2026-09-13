@@ -103,31 +103,33 @@ fun noDataNeverFetchedPreview(context: Context): TilePreviewData =
 private fun sampleData(ageMillis: Long = 0, secondTripCancelled: Boolean = false): CachedTripsData =
     CachedTripsData(
         direction = "ab",
+        fromStationName = "Almere Oostvaarders",
+        toStationName = "Amsterdam Centraal",
         trips =
             listOf(
                 TripDto(
                     departureTime = "2026-11-02T12:08:00+0100",
+                    arrivalTime = "2026-11-02T12:41:00+0100",
                     delayMinutes = 5,
                     track = "4b",
-                    durationMinutes = 33,
-                    transfers = 0,
                     cancelled = false,
+                    crowdForecast = "MEDIUM",
                 ),
                 TripDto(
                     departureTime = "2026-11-02T12:18:00+0100",
+                    arrivalTime = "2026-11-02T12:46:00+0100",
                     delayMinutes = 0,
                     track = "4b",
-                    durationMinutes = 28,
-                    transfers = 0,
                     cancelled = secondTripCancelled,
+                    crowdForecast = "LOW",
                 ),
                 TripDto(
                     departureTime = "2026-11-02T12:33:00+0100",
+                    arrivalTime = "2026-11-02T13:12:00+0100",
                     delayMinutes = 0,
                     track = "3",
-                    durationMinutes = 39,
-                    transfers = 1,
                     cancelled = false,
+                    crowdForecast = "UNKNOWN",
                 ),
             ),
         fetchedAtEpochMillis = System.currentTimeMillis() - ageMillis,

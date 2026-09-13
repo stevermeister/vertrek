@@ -3,6 +3,7 @@ package com.github.stevermeister.vertrek.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.stevermeister.vertrek.data.CacheState
+import com.github.stevermeister.vertrek.data.CachedTripsData
 import com.github.stevermeister.vertrek.data.Direction
 import com.github.stevermeister.vertrek.data.NoDataReason
 import com.github.stevermeister.vertrek.data.TripDto
@@ -30,6 +31,10 @@ sealed interface TripsUiState {
     data class Content(
         val direction: Direction,
         val isRefreshing: Boolean,
+        // Null only when there's no cache at all (NoData) — station names
+        // come from the Worker response, never from build config.
+        val fromStationName: String?,
+        val toStationName: String?,
         val body: TripsBody,
     ) : TripsUiState
 }
@@ -71,7 +76,13 @@ class TripsViewModel(
                     isRefreshing,
                 ) { cached, lastFailure, refreshing ->
                     val cacheState = cacheStateOf(cached, lastFailure, clock)
-                    TripsUiState.Content(direction, refreshing, toBody(cacheState)) as TripsUiState
+                    TripsUiState.Content(
+                        direction = direction,
+                        isRefreshing = refreshing,
+                        fromStationName = stationNameOrNull(cacheState) { it.fromStationName },
+                        toStationName = stationNameOrNull(cacheState) { it.toStationName },
+                        body = toBody(cacheState),
+                    ) as TripsUiState
                 }
             }
             .stateIn(viewModelScope, SharingStarted.Eagerly, TripsUiState.Loading)
@@ -99,6 +110,13 @@ class TripsViewModel(
             onDirectionChanged()
         }
     }
+
+    private fun stationNameOrNull(cacheState: CacheState, select: (CachedTripsData) -> String): String? =
+        when (cacheState) {
+            is CacheState.Fresh -> select(cacheState.data)
+            is CacheState.Stale -> select(cacheState.data)
+            is CacheState.NoData -> null
+        }
 
     private fun toBody(cacheState: CacheState): TripsBody =
         when (cacheState) {

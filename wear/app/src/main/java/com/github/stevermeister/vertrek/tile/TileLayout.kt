@@ -7,17 +7,21 @@ import androidx.wear.protolayout.DeviceParametersBuilders.DeviceParameters
 import androidx.wear.protolayout.DimensionBuilders
 import androidx.wear.protolayout.LayoutElementBuilders
 import androidx.wear.protolayout.LayoutElementBuilders.LayoutElement
-import androidx.wear.protolayout.ModifiersBuilders
+import androidx.wear.protolayout.ModifiersBuilders.Modifiers
 import androidx.wear.protolayout.material3.MaterialScope
 import androidx.wear.protolayout.material3.Typography
 import androidx.wear.protolayout.material3.materialScope
 import androidx.wear.protolayout.material3.primaryLayout
 import androidx.wear.protolayout.material3.text
-import androidx.wear.protolayout.material3.titleCard
+import androidx.wear.protolayout.modifiers.LayoutModifier
+import androidx.wear.protolayout.modifiers.background
+import androidx.wear.protolayout.modifiers.border
 import androidx.wear.protolayout.modifiers.clickable
+import androidx.wear.protolayout.modifiers.clip
 import androidx.wear.protolayout.modifiers.loadAction
+import androidx.wear.protolayout.modifiers.padding
+import androidx.wear.protolayout.modifiers.toProtoLayoutModifiers
 import androidx.wear.protolayout.types.layoutString
-import com.github.stevermeister.vertrek.BuildConfig
 import com.github.stevermeister.vertrek.MainActivity
 import com.github.stevermeister.vertrek.data.CacheState
 import com.github.stevermeister.vertrek.data.CachedTripsData
@@ -25,13 +29,16 @@ import com.github.stevermeister.vertrek.data.Direction
 import com.github.stevermeister.vertrek.data.NoDataReason
 import com.github.stevermeister.vertrek.data.TripDto
 import com.github.stevermeister.vertrek.data.ageMinutes
+import com.github.stevermeister.vertrek.data.formattedArrivalTime
 import com.github.stevermeister.vertrek.data.formattedDepartureTime
 import com.github.stevermeister.vertrek.data.opposite
 import com.github.stevermeister.vertrek.data.parsedDepartureInstant
 import java.time.Clock
 import java.time.Duration
 
-private const val MAX_ROWS = 3
+// Matches the Worker's MAX_TRIPS (worker/wrangler.jsonc) — NS's own
+// per-call cap, not a number either side can raise on its own.
+private const val MAX_ROWS = 5
 
 fun buildTileLayout(
     context: Context,
@@ -51,118 +58,177 @@ fun buildTileLayout(
 private fun launchMainActivity(context: Context): ActionBuilders.Action =
     ActionBuilders.launchAction(ComponentName(context, MainActivity::class.java))
 
+/**
+ * Full station names on one line: the first name and the arrow always
+ * render in full; only the trailing name (and, if stale, its age suffix)
+ * ellipsizes if there isn't room. A small swap icon sits at the end —
+ * not a large button.
+ */
 private fun MaterialScope.header(direction: Direction, cacheState: CacheState, clock: Clock): LayoutElement {
-    val directionText =
-        when (direction) {
-            Direction.AB -> "${BuildConfig.STATION_A} → ${BuildConfig.STATION_B}"
-            Direction.BA -> "${BuildConfig.STATION_B} → ${BuildConfig.STATION_A}"
-        }
-    val label =
-        if (cacheState is CacheState.Stale) {
-            "$directionText · ${formatAge(cacheState.data, clock)}"
-        } else {
-            directionText
-        }
+    val stationNames = stationNamesOrNull(cacheState)
+    val fromName = stationNames?.first ?: "–"
+    var toName = stationNames?.second ?: "–"
+    if (cacheState is CacheState.Stale) {
+        toName = "$toName · ${cacheState.data.ageMinutes(clock)}m old"
+    }
 
-    // No onClick lambda: a LoadAction re-invokes onTileRequest, which reads
-    // this id back from currentState.lastClickableId. The id names the
-    // target direction (not "swap") so a replayed/stale id is idempotent —
-    // see SwapDirection.kt.
     val swapClickable = clickable(action = loadAction(), id = swapClickableId(direction.opposite()))
 
     return LayoutElementBuilders.Row.Builder()
         .setWidth(DimensionBuilders.expand())
+        .addContent(text("$fromName → ".layoutString, typography = Typography.LABEL_SMALL, maxLines = 1))
         .addContent(
             LayoutElementBuilders.Box.Builder()
                 .setWidth(DimensionBuilders.expand())
                 .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
-                .addContent(text(label.layoutString, typography = Typography.LABEL_SMALL, maxLines = 1))
+                .addContent(
+                    text(
+                        toName.layoutString,
+                        typography = Typography.LABEL_SMALL,
+                        maxLines = 1,
+                        overflow = LayoutElementBuilders.TEXT_OVERFLOW_ELLIPSIZE,
+                    ),
+                )
                 .build(),
         )
         .addContent(
             LayoutElementBuilders.Box.Builder()
-                .setModifiers(ModifiersBuilders.Modifiers.Builder().setClickable(swapClickable).build())
+                .setModifiers(Modifiers.Builder().setClickable(swapClickable).build())
                 .addContent(text("⇄".layoutString, typography = Typography.LABEL_SMALL))
                 .build(),
         )
         .build()
 }
 
+private fun stationNamesOrNull(cacheState: CacheState): Pair<String, String>? =
+    when (cacheState) {
+        is CacheState.Fresh -> cacheState.data.fromStationName to cacheState.data.toStationName
+        is CacheState.Stale -> cacheState.data.fromStationName to cacheState.data.toStationName
+        is CacheState.NoData -> null
+    }
+
 private fun MaterialScope.mainContent(cacheState: CacheState, clock: Clock): LayoutElement =
     when (cacheState) {
-        is CacheState.Fresh -> tripsCard(cacheState.data, clock)
-        is CacheState.Stale -> tripsCard(cacheState.data, clock)
+        is CacheState.Fresh -> tripsColumn(cacheState.data, clock)
+        is CacheState.Stale -> tripsColumn(cacheState.data, clock)
         is CacheState.NoData -> noDataContent(cacheState.reason)
     }
 
-private fun MaterialScope.tripsCard(data: CachedTripsData, clock: Clock): LayoutElement {
-    val trips = data.trips.take(MAX_ROWS)
-    val first = trips.firstOrNull()
-    val rest = trips.drop(1)
-
-    return titleCard(
-        onClick = clickable(action = launchMainActivity(context)),
-        title = {
-            text(
-                (first?.let { minutesUntilLabel(it, clock) } ?: "–").layoutString,
-                typography = Typography.DISPLAY_SMALL,
-                maxLines = 1,
-            )
-        },
-        content = {
-            LayoutElementBuilders.Column.Builder()
-                .apply {
-                    if (first != null) addContent(secondaryLine(first))
-                    rest.forEach { addContent(tripRow(it)) }
-                }
-                .build()
-        },
-        height = DimensionBuilders.wrap(),
-    )
-}
-
-/** The first trip's secondary detail line: HH:mm and track under the big "N min" figure. */
-private fun MaterialScope.secondaryLine(trip: TripDto): LayoutElement =
-    LayoutElementBuilders.Row.Builder()
-        .setWidth(DimensionBuilders.expand())
-        .addContent(text(formatRowLabel(trip), typography = Typography.BODY_SMALL, maxLines = 1))
-        .build()
-
-/** A plain trip row (rows 2-3): HH:mm, "+N" delay when present, track right-aligned. */
-private fun MaterialScope.tripRow(trip: TripDto): LayoutElement {
-    val row = LayoutElementBuilders.Row.Builder().setWidth(DimensionBuilders.expand())
-
-    if (trip.cancelled) {
-        row.addContent(text(trip.formattedDepartureTime().layoutString, typography = Typography.BODY_SMALL))
-        row.addContent(
-            LayoutElementBuilders.Box.Builder()
-                .setWidth(DimensionBuilders.expand())
-                .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_END)
-                .addContent(text("Cancelled".layoutString, typography = Typography.BODY_SMALL, color = colorScheme.error))
-                .build(),
-        )
-        return row.build()
+private fun MaterialScope.tripsColumn(data: CachedTripsData, clock: Clock): LayoutElement {
+    val shown = data.trips.take(MAX_ROWS)
+    if (shown.isEmpty()) {
+        return text("No upcoming trips".layoutString, typography = Typography.BODY_SMALL, maxLines = 1)
     }
 
-    row.addContent(text(trip.formattedDepartureTime().layoutString, typography = Typography.BODY_SMALL))
+    val column = LayoutElementBuilders.Column.Builder()
+    shown.forEachIndexed { index, trip -> column.addContent(tripRow(trip, isFirstRow = index == 0, clock)) }
+    return column.build()
+}
+
+private fun MaterialScope.tripRow(trip: TripDto, isFirstRow: Boolean, clock: Clock): LayoutElement {
+    val zonesRowBuilder =
+        LayoutElementBuilders.Row.Builder()
+            .setWidth(DimensionBuilders.expand())
+            .addContent(timesBlock(trip))
+            .addContent(spacer(DimensionBuilders.expand()))
+            .addContent(trackChip(trip.track))
+
+    val dots = crowdDots(trip.crowdForecast)
+    if (dots != null) {
+        zonesRowBuilder.addContent(spacer(DimensionBuilders.dp(4f)))
+        zonesRowBuilder.addContent(dots)
+    }
+    val zonesRow = zonesRowBuilder.build()
+
+    if (!isFirstRow) return zonesRow
+
+    return LayoutElementBuilders.Column.Builder()
+        .addContent(text(minutesUntilLabel(trip, clock).layoutString, typography = Typography.DISPLAY_SMALL, maxLines = 1))
+        .addContent(zonesRow)
+        .build()
+}
+
+/** "HH:mm +N - HH:mm", delay inline in the error colour. Struck through when cancelled. */
+private fun MaterialScope.timesBlock(trip: TripDto): LayoutElement {
+    val row = LayoutElementBuilders.Row.Builder()
+    row.addContent(text(trip.formattedDepartureTime().layoutString, typography = Typography.BODY_SMALL, maxLines = 1))
     if (trip.delayMinutes > 0) {
         row.addContent(
-            text(
-                "+${trip.delayMinutes}".layoutString,
-                typography = Typography.BODY_SMALL,
-                color = colorScheme.error,
-            ),
+            text(" +${trip.delayMinutes}".layoutString, typography = Typography.BODY_SMALL, color = colorScheme.error, maxLines = 1),
         )
     }
-    row.addContent(
-        LayoutElementBuilders.Box.Builder()
-            .setWidth(DimensionBuilders.expand())
-            .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_END)
-            .addContent(text((trip.track ?: "–").layoutString, typography = Typography.BODY_SMALL))
-            .build(),
+    row.addContent(text(" - ${trip.formattedArrivalTime()}".layoutString, typography = Typography.BODY_SMALL, maxLines = 1))
+    val content = row.build()
+    return if (trip.cancelled) strikethroughOverlay(content) else content
+}
+
+/**
+ * protolayout's Text has no strikethrough property (only underline), so
+ * this overlays a thin line across the vertical middle of the content —
+ * the only way to get a real strikethrough rather than just a marker.
+ * Not verified on a real device/renderer.
+ */
+private fun MaterialScope.strikethroughOverlay(content: LayoutElement): LayoutElement =
+    LayoutElementBuilders.Box.Builder()
+        .addContent(content)
+        .addContent(
+            LayoutElementBuilders.Box.Builder()
+                .setWidth(DimensionBuilders.expand())
+                .setHeight(DimensionBuilders.dp(1f))
+                .setModifiers(LayoutModifier.background(colorScheme.onSurfaceVariant).toProtoLayoutModifiers())
+                .build(),
+        )
+        .build()
+
+/** Platform number in a small outlined box — no "Track" label. */
+private fun MaterialScope.trackChip(track: String?): LayoutElement =
+    text(
+        (track ?: "–").layoutString,
+        typography = Typography.LABEL_SMALL,
+        maxLines = 1,
+        modifier =
+            LayoutModifier
+                .border(width = 1f, color = colorScheme.outline)
+                .clip(3f)
+                .padding(horizontal = 4f, vertical = 1f),
     )
+
+/**
+ * Three small dots, filled 1/2/3 for LOW/MEDIUM/HIGH. UNKNOWN renders
+ * nothing at all — no element, not even an empty placeholder.
+ */
+private fun MaterialScope.crowdDots(crowdForecast: String): LayoutElement? {
+    val filledCount =
+        when (crowdForecast) {
+            "LOW" -> 1
+            "MEDIUM" -> 2
+            "HIGH" -> 3
+            else -> 0
+        }
+    if (filledCount == 0) return null
+
+    val row = LayoutElementBuilders.Row.Builder()
+    for (i in 0 until 3) {
+        if (i > 0) row.addContent(spacer(DimensionBuilders.dp(2f)))
+        val filled = i < filledCount
+        row.addContent(
+            LayoutElementBuilders.Box.Builder()
+                .setWidth(DimensionBuilders.dp(4f))
+                .setHeight(DimensionBuilders.dp(4f))
+                .setModifiers(
+                    LayoutModifier
+                        .background(if (filled) colorScheme.primary else colorScheme.outlineVariant)
+                        .clip(2f)
+                        .toProtoLayoutModifiers(),
+                )
+                .build(),
+        )
+    }
     return row.build()
 }
+
+private fun spacer(width: DimensionBuilders.ContainerDimension): LayoutElement =
+    LayoutElementBuilders.Box.Builder().setWidth(width).build()
 
 private fun MaterialScope.noDataContent(reason: NoDataReason): LayoutElement {
     val (message, detail) =
@@ -178,16 +244,8 @@ private fun MaterialScope.noDataContent(reason: NoDataReason): LayoutElement {
         .build()
 }
 
-private fun formatRowLabel(trip: TripDto): androidx.wear.protolayout.types.LayoutString =
-    "${trip.formattedDepartureTime()}  ${trip.track ?: "–"}".layoutString
-
 private fun minutesUntilLabel(trip: TripDto, clock: Clock): String {
     val departure = trip.parsedDepartureInstant() ?: return "--"
     val minutes = Duration.between(clock.instant(), departure).toMinutes().coerceAtLeast(0)
     return "$minutes min"
 }
-
-private fun formatAge(data: CachedTripsData, clock: Clock): String =
-    // Rendered only for CacheState.Stale, whose age is already clamped to
-    // [3, 15] minutes by cacheStateOf, so a plain minute count is enough.
-    "${data.ageMinutes(clock)} min old"

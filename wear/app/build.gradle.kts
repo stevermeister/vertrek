@@ -46,19 +46,9 @@ android {
             "VERTREK_API_KEY",
             "\"${localProperties.getProperty("VERTREK_API_KEY", "")}\"",
         )
-        // Display-only — the Worker resolves stations server-side, the app
-        // never sends these anywhere. Used solely for the tile's header
-        // label (e.g. "ALMO -> ASD"). Defaults keep a fresh checkout buildable.
-        buildConfigField(
-            "String",
-            "STATION_A",
-            "\"${localProperties.getProperty("STATION_A", "A")}\"",
-        )
-        buildConfigField(
-            "String",
-            "STATION_B",
-            "\"${localProperties.getProperty("STATION_B", "B")}\"",
-        )
+        // No STATION_A/STATION_B here: station display names come from the
+        // Worker response (fromStationName/toStationName), not from build
+        // config — see TripDto.kt / the header in TileLayout.kt/MainActivity.kt.
     }
 
     signingConfigs {

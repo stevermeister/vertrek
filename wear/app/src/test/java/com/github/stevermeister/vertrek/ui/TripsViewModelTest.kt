@@ -62,7 +62,14 @@ class TripsViewModelTest {
 
     private fun sampleTrips() =
         listOf(
-            TripDto("2026-11-02T11:08:00Z", delayMinutes = 5, track = "4b", durationMinutes = 33, transfers = 0, cancelled = false),
+            TripDto(
+                departureTime = "2026-11-02T11:08:00Z",
+                arrivalTime = "2026-11-02T11:41:00Z",
+                delayMinutes = 5,
+                track = "4b",
+                cancelled = false,
+                crowdForecast = "MEDIUM",
+            ),
         )
 
     @Test
@@ -79,13 +86,21 @@ class TripsViewModelTest {
         repository.setDirectionOverride(Direction.AB)
         repository.saveCached(
             Direction.AB,
-            CachedTripsData(direction = "ab", trips = sampleTrips(), fetchedAtEpochMillis = fixedClock.millis()),
+            CachedTripsData(
+                direction = "ab",
+                fromStationName = "Almere Oostvaarders",
+                toStationName = "Amsterdam Centraal",
+                trips = sampleTrips(),
+                fetchedAtEpochMillis = fixedClock.millis(),
+            ),
         )
 
         val viewModel = TripsViewModel(repository, clock = fixedClock)
         val state = viewModel.uiState.drop(1).first() as TripsUiState.Content
 
         assertEquals(Direction.AB, state.direction)
+        assertEquals("Almere Oostvaarders", state.fromStationName)
+        assertEquals("Amsterdam Centraal", state.toStationName)
         assertTrue(state.body is TripsBody.Fresh)
         assertEquals(sampleTrips(), (state.body as TripsBody.Fresh).trips)
     }
@@ -117,6 +132,8 @@ class TripsViewModelTest {
         val state = viewModel.uiState.drop(1).first() as TripsUiState.Content
 
         assertEquals(TripsBody.NoData(NoDataReason.NEVER_FETCHED), state.body)
+        assertEquals(null, state.fromStationName)
+        assertEquals(null, state.toStationName)
     }
 
     @Test

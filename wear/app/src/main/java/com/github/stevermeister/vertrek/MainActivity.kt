@@ -4,6 +4,9 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,27 +14,31 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
-import androidx.wear.compose.foundation.lazy.items
-import androidx.wear.compose.material3.Button
+import androidx.wear.compose.foundation.lazy.itemsIndexed
 import androidx.wear.compose.material3.CircularProgressIndicator
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 import androidx.wear.tiles.TileService
-import com.github.stevermeister.vertrek.data.Direction
 import com.github.stevermeister.vertrek.data.NoDataReason
 import com.github.stevermeister.vertrek.data.TripDto
 import com.github.stevermeister.vertrek.data.TripsRepository
+import com.github.stevermeister.vertrek.data.formattedArrivalTime
 import com.github.stevermeister.vertrek.data.formattedDepartureTime
+import com.github.stevermeister.vertrek.data.parsedDepartureInstant
 import com.github.stevermeister.vertrek.data.tripsDataStore
 import com.github.stevermeister.vertrek.tile.VertrekTileService
 import com.github.stevermeister.vertrek.ui.TripsBody
@@ -94,13 +101,22 @@ private fun LoadingScreen() {
 @Composable
 private fun ContentScreen(state: TripsUiState.Content, onSwap: () -> Unit, onRefresh: () -> Unit) {
     ScalingLazyColumn(modifier = Modifier.fillMaxSize()) {
-        item { DirectionHeader(state.direction, state.isRefreshing, onSwap, onRefresh) }
+        item {
+            DirectionHeader(
+                fromStationName = state.fromStationName,
+                toStationName = state.toStationName,
+                isRefreshing = state.isRefreshing,
+                onSwap = onSwap,
+                onRefresh = onRefresh,
+            )
+        }
 
         when (val body = state.body) {
-            is TripsBody.Fresh -> items(body.trips.take(MAX_ROWS_SHOWN)) { TripRow(it) }
+            is TripsBody.Fresh ->
+                itemsIndexed(body.trips.take(MAX_ROWS_SHOWN)) { index, trip -> TripRow(trip, isFirstRow = index == 0) }
             is TripsBody.Stale -> {
                 item { Text("Data is ${body.ageMinutes} min old") }
-                items(body.trips.take(MAX_ROWS_SHOWN)) { TripRow(it) }
+                itemsIndexed(body.trips.take(MAX_ROWS_SHOWN)) { index, trip -> TripRow(trip, isFirstRow = index == 0) }
             }
             is TripsBody.NoData -> item { NoDataMessage(body.reason) }
             TripsBody.Empty -> item { Text("No upcoming trips") }
@@ -110,50 +126,113 @@ private fun ContentScreen(state: TripsUiState.Content, onSwap: () -> Unit, onRef
 
 @Composable
 private fun DirectionHeader(
-    direction: Direction,
+    fromStationName: String?,
+    toStationName: String?,
     isRefreshing: Boolean,
     onSwap: () -> Unit,
     onRefresh: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Button(onClick = onSwap) {
-            Text(
-                when (direction) {
-                    Direction.AB -> "${BuildConfig.STATION_A} → ${BuildConfig.STATION_B}"
-                    Direction.BA -> "${BuildConfig.STATION_B} → ${BuildConfig.STATION_A}"
-                },
-            )
-        }
+        // The first name and arrow always render in full; only the second
+        // name shrinks/ellipsizes if there isn't room. No filled pill.
+        Text("${fromStationName ?: "–"} → ", maxLines = 1)
+        Text(
+            toStationName ?: "–",
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        // Small icon, not a large button.
+        Text(
+            "⇄",
+            modifier = Modifier.clickable(onClick = onSwap).padding(horizontal = 6.dp),
+        )
         if (isRefreshing) {
-            CircularProgressIndicator(modifier = Modifier.padding(start = 4.dp))
+            CircularProgressIndicator(modifier = Modifier.size(16.dp))
         } else {
-            Button(onClick = onRefresh) { Text("⟳") }
+            Text(
+                "⟳",
+                modifier = Modifier.clickable(onClick = onRefresh).padding(horizontal = 6.dp),
+            )
         }
     }
 }
 
 @Composable
-private fun TripRow(trip: TripDto) {
+private fun TripRow(trip: TripDto, isFirstRow: Boolean) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(trip.formattedDepartureTime())
+        if (isFirstRow) {
+            Text(minutesUntilLabel(trip), style = MaterialTheme.typography.displaySmall)
+        }
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TimesBlock(trip, modifier = Modifier.weight(1f))
+            TrackChip(trip.track)
+            CrowdDots(trip.crowdForecast, modifier = Modifier.padding(start = 4.dp))
+        }
+    }
+}
+
+/** "HH:mm +N - HH:mm", delay inline in the error colour, struck through when cancelled. */
+@Composable
+private fun TimesBlock(trip: TripDto, modifier: Modifier = Modifier) {
+    val decoration = if (trip.cancelled) TextDecoration.LineThrough else TextDecoration.None
+    Row(modifier = modifier) {
+        Text(trip.formattedDepartureTime(), textDecoration = decoration, maxLines = 1)
+        if (trip.delayMinutes > 0) {
             Text(
-                when {
-                    trip.cancelled -> "Cancelled"
-                    trip.delayMinutes > 0 -> "+${trip.delayMinutes}"
-                    else -> "On time"
-                },
+                " +${trip.delayMinutes}",
+                color = MaterialTheme.colorScheme.error,
+                textDecoration = decoration,
+                maxLines = 1,
             )
         }
-        if (!trip.cancelled) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Track ${trip.track ?: "–"}")
-                Text("${trip.durationMinutes} min")
-                if (trip.transfers > 0) Text("${trip.transfers} chg")
-            }
+        Text(" - ${trip.formattedArrivalTime()}", textDecoration = decoration, maxLines = 1)
+    }
+}
+
+/** Platform number in a small outlined box — no "Track" label. */
+@Composable
+private fun TrackChip(track: String?) {
+    Text(
+        track ?: "–",
+        modifier =
+            Modifier
+                .border(width = 1.dp, color = MaterialTheme.colorScheme.outline, shape = RoundedCornerShape(4.dp))
+                .padding(horizontal = 4.dp, vertical = 1.dp),
+        maxLines = 1,
+    )
+}
+
+/**
+ * Three small dots, filled 1/2/3 for LOW/MEDIUM/HIGH. UNKNOWN renders
+ * nothing at all — no composable, not even an empty placeholder.
+ */
+@Composable
+private fun CrowdDots(crowdForecast: String, modifier: Modifier = Modifier) {
+    val filledCount =
+        when (crowdForecast) {
+            "LOW" -> 1
+            "MEDIUM" -> 2
+            "HIGH" -> 3
+            else -> 0
+        }
+    if (filledCount == 0) return
+
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        repeat(3) { index ->
+            val filled = index < filledCount
+            Box(
+                modifier =
+                    Modifier
+                        .size(4.dp)
+                        .background(
+                            color = if (filled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                            shape = RoundedCornerShape(2.dp),
+                        ),
+            )
         }
     }
 }
@@ -170,4 +249,11 @@ private fun NoDataMessage(reason: NoDataReason) {
         Text(message)
         Text(detail)
     }
+}
+
+private fun minutesUntilLabel(trip: TripDto): String {
+    val departure = trip.parsedDepartureInstant() ?: return "-- min"
+    val minutes =
+        java.time.Duration.between(java.time.Instant.now(), departure).toMinutes().coerceAtLeast(0)
+    return "$minutes min"
 }
