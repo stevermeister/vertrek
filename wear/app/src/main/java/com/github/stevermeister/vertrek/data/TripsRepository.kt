@@ -6,7 +6,9 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 
 private const val DATASTORE_NAME = "vertrek_trips"
@@ -33,6 +35,9 @@ class TripsRepository(private val dataStore: DataStore<Preferences>) {
         return Direction.fromParam(raw)
     }
 
+    fun observeDirectionOverride(): Flow<Direction?> =
+        dataStore.data.map { prefs -> prefs[PreferenceKeys.DIRECTION_OVERRIDE]?.let { Direction.fromParam(it) } }
+
     suspend fun setDirectionOverride(direction: Direction?) {
         dataStore.edit { prefs ->
             if (direction == null) {
@@ -48,6 +53,12 @@ class TripsRepository(private val dataStore: DataStore<Preferences>) {
         return runCatching { json.decodeFromString<CachedTripsData>(raw) }.getOrNull()
     }
 
+    fun observeCached(direction: Direction): Flow<CachedTripsData?> =
+        dataStore.data.map { prefs ->
+            prefs[PreferenceKeys.cache(direction)]
+                ?.let { raw -> runCatching { json.decodeFromString<CachedTripsData>(raw) }.getOrNull() }
+        }
+
     suspend fun saveCached(direction: Direction, data: CachedTripsData) {
         dataStore.edit { prefs ->
             prefs[PreferenceKeys.cache(direction)] = json.encodeToString(data)
@@ -58,6 +69,11 @@ class TripsRepository(private val dataStore: DataStore<Preferences>) {
         val raw = dataStore.data.first()[PreferenceKeys.lastFailure(direction)] ?: return null
         return runCatching { NoDataReason.valueOf(raw) }.getOrNull()
     }
+
+    fun observeLastFailureReason(direction: Direction): Flow<NoDataReason?> =
+        dataStore.data.map { prefs ->
+            prefs[PreferenceKeys.lastFailure(direction)]?.let { raw -> runCatching { NoDataReason.valueOf(raw) }.getOrNull() }
+        }
 
     /** Pass null to clear it — that's what a successful fetch does. */
     suspend fun setLastFailureReason(direction: Direction, reason: NoDataReason?) {

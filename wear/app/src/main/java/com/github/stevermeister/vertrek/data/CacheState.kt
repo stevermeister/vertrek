@@ -44,7 +44,7 @@ sealed interface CacheState {
  */
 fun cacheStateOf(cached: CachedTripsData?, lastFailureReason: NoDataReason?, clock: Clock): CacheState {
     if (cached != null) {
-        val age = Duration.between(Instant.ofEpochMilli(cached.fetchedAtEpochMillis), Instant.now(clock))
+        val age = cached.ageOf(clock)
         when {
             age < CacheFreshness.FRESH_THRESHOLD -> return CacheState.Fresh(cached)
             age <= CacheFreshness.STALE_THRESHOLD -> return CacheState.Stale(cached)
@@ -52,3 +52,8 @@ fun cacheStateOf(cached: CachedTripsData?, lastFailureReason: NoDataReason?, clo
     }
     return CacheState.NoData(lastFailureReason ?: NoDataReason.NEVER_FETCHED)
 }
+
+fun CachedTripsData.ageOf(clock: Clock): Duration =
+    Duration.between(Instant.ofEpochMilli(fetchedAtEpochMillis), Instant.now(clock))
+
+fun CachedTripsData.ageMinutes(clock: Clock): Long = ageOf(clock).toMinutes()

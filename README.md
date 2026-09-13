@@ -29,7 +29,7 @@ and extend, but that's a different project from what's here.
 
 ```
 worker/   Cloudflare Worker (TypeScript) — proxies the NS API
-wear/     Wear OS app (Kotlin)           — tile + companion app, not built yet
+wear/     Wear OS app (Kotlin)           — tile + companion app
 ```
 
 ## Setup
@@ -135,9 +135,70 @@ curl -H "X-Vertrek-Key: your-local-dev-vertrek-key" "http://localhost:8787/next?
 
 ### 3. Build and sideload the watch app
 
-Not built yet — this section will cover building a signed release APK and
-installing it on a Galaxy Watch over wireless `adb` once the `wear/`
-module exists.
+The watch app is a single Wear OS module (`wear/`) — a tile
+(`androidx.wear.protolayout`) plus a Compose companion screen. It talks
+only to your own Worker from step 2, using the `X-Vertrek-Key` header.
+
+Create `wear/local.properties` (gitignored, never committed):
+
+```properties
+sdk.dir=/path/to/your/Android/sdk
+NS_WORKER_BASE_URL=https://your-worker-name.your-subdomain.workers.dev
+VERTREK_API_KEY=the-same-value-you-set-as-the-Worker-secret-VERTREK_KEY
+STATION_A=ALMO
+STATION_B=ASD
+```
+
+All four are read into `BuildConfig` at build time — never hardcoded in
+source:
+
+- `NS_WORKER_BASE_URL` / `VERTREK_API_KEY` — where the app sends requests
+  and the key it authenticates with. Must match your deployed Worker's
+  URL and its `VERTREK_KEY` secret exactly, or every request comes back
+  `401`.
+- `STATION_A` / `STATION_B` — **display-only**. The Worker resolves
+  stations server-side; the app never sends these anywhere. They only
+  drive the header label (e.g. "ALMO → ASD"). Default to "A"/"B" if
+  omitted, so a fresh checkout still builds.
+
+Build a debug APK:
+
+```bash
+cd wear
+./gradlew assembleDebug
+# output: app/build/outputs/apk/debug/app-debug.apk
+```
+
+#### Install on a Galaxy Watch over wireless debugging
+
+On the watch: **Settings → About watch → tap "Software version" 7
+times** to unlock Developer options, then **Settings → Developer
+options** → enable **ADB debugging** and **Wireless debugging**. Open
+**Wireless debugging → Pair new device** — it shows a 6-digit code and a
+`pairing IP:port`, and separately the screen shows a `connection IP:port`
+for after pairing.
+
+```bash
+# 1. Pair once (IP:port and code from "Pair new device" on the watch)
+adb pair <PAIRING_IP>:<PAIRING_PORT>
+# enter the 6-digit code when prompted
+
+# 2. Connect (IP:port shown on the main Wireless debugging screen —
+#    usually a different port than the pairing one)
+adb connect <WATCH_IP>:<CONNECT_PORT>
+
+# 3. Confirm it's there
+adb devices
+
+# 4. Install (-r replaces an existing install, keeping app data)
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+# or, for a signed release build:
+adb install -r app/build/outputs/apk/release/app-release.apk
+```
+
+Pairing is one-time per watch/computer pair; after that, `adb connect`
+alone is enough (the watch's IP can change between networks, so re-check
+the Wireless debugging screen if `connect` fails).
 
 ---
 

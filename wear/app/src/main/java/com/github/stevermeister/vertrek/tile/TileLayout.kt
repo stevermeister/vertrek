@@ -24,15 +24,13 @@ import com.github.stevermeister.vertrek.data.CachedTripsData
 import com.github.stevermeister.vertrek.data.Direction
 import com.github.stevermeister.vertrek.data.NoDataReason
 import com.github.stevermeister.vertrek.data.TripDto
+import com.github.stevermeister.vertrek.data.ageMinutes
+import com.github.stevermeister.vertrek.data.formattedDepartureTime
 import com.github.stevermeister.vertrek.data.opposite
+import com.github.stevermeister.vertrek.data.parsedDepartureInstant
 import java.time.Clock
 import java.time.Duration
-import java.time.OffsetDateTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
-private val DEPARTURE_TIME_PARSER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXX")
-private val DISPLAY_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private const val MAX_ROWS = 3
 
 fun buildTileLayout(
@@ -135,7 +133,7 @@ private fun MaterialScope.tripRow(trip: TripDto): LayoutElement {
     val row = LayoutElementBuilders.Row.Builder().setWidth(DimensionBuilders.expand())
 
     if (trip.cancelled) {
-        row.addContent(text(formatTime(trip).layoutString, typography = Typography.BODY_SMALL))
+        row.addContent(text(trip.formattedDepartureTime().layoutString, typography = Typography.BODY_SMALL))
         row.addContent(
             LayoutElementBuilders.Box.Builder()
                 .setWidth(DimensionBuilders.expand())
@@ -146,7 +144,7 @@ private fun MaterialScope.tripRow(trip: TripDto): LayoutElement {
         return row.build()
     }
 
-    row.addContent(text(formatTime(trip).layoutString, typography = Typography.BODY_SMALL))
+    row.addContent(text(trip.formattedDepartureTime().layoutString, typography = Typography.BODY_SMALL))
     if (trip.delayMinutes > 0) {
         row.addContent(
             text(
@@ -181,27 +179,15 @@ private fun MaterialScope.noDataContent(reason: NoDataReason): LayoutElement {
 }
 
 private fun formatRowLabel(trip: TripDto): androidx.wear.protolayout.types.LayoutString =
-    "${formatTime(trip)}  ${trip.track ?: "–"}".layoutString
-
-private fun formatTime(trip: TripDto): String =
-    runCatching {
-        OffsetDateTime.parse(trip.departureTime, DEPARTURE_TIME_PARSER)
-            .atZoneSameInstant(ZoneId.systemDefault())
-            .format(DISPLAY_TIME_FORMATTER)
-    }.getOrDefault("--:--")
+    "${trip.formattedDepartureTime()}  ${trip.track ?: "–"}".layoutString
 
 private fun minutesUntilLabel(trip: TripDto, clock: Clock): String {
-    val departure =
-        runCatching { OffsetDateTime.parse(trip.departureTime, DEPARTURE_TIME_PARSER).toInstant() }
-            .getOrNull() ?: return "--"
+    val departure = trip.parsedDepartureInstant() ?: return "--"
     val minutes = Duration.between(clock.instant(), departure).toMinutes().coerceAtLeast(0)
     return "$minutes min"
 }
 
-private fun formatAge(data: CachedTripsData, clock: Clock): String {
+private fun formatAge(data: CachedTripsData, clock: Clock): String =
     // Rendered only for CacheState.Stale, whose age is already clamped to
     // [3, 15] minutes by cacheStateOf, so a plain minute count is enough.
-    val ageMinutes =
-        Duration.between(java.time.Instant.ofEpochMilli(data.fetchedAtEpochMillis), clock.instant()).toMinutes()
-    return "$ageMinutes min old"
-}
+    "${data.ageMinutes(clock)} min old"
