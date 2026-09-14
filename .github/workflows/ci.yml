@@ -27,3 +27,30 @@ jobs:
 
       # Intentionally NOT run in CI: `npm run verify:live` — it calls the
       # real NS API and needs a personal NS_API_KEY. Run it locally/manually.
+
+  wear:
+    name: Wear app (unit tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wear
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # No local.properties here (it's gitignored, never committed) —
+      # build.gradle.kts already defaults NS_WORKER_BASE_URL/VERTREK_API_KEY
+      # to "" when the file is absent, and the unit tests never touch the
+      # real network (WorkerClientTest uses ktor-client-mock), so this
+      # builds and runs cleanly on a fresh checkout with no secrets.
+      - run: ./gradlew test --console=plain
+
+      # Intentionally NOT run in CI: assembleRelease — it needs a personal
+      # keystore.properties/keystore file to sign. assembleDebug/test above
+      # already exercise the same Kotlin compilation.
