@@ -248,12 +248,21 @@ sdkmanager "emulator" "system-images;android-34;android-wear;arm64-v8a"
 avdmanager create avd -n vertrek-wear \
   -k "system-images;android-34;android-wear;arm64-v8a" \
   -d wearos_large_round
+
+# A second AVD on the small-round (384x384) profile — the tightest
+# common Wear screen. Useful for checking that the header's long
+# station names actually ellipsize instead of clipping/wrapping when
+# there's meaningfully less width to work with.
+avdmanager create avd -n vertrek-wear-small \
+  -k "system-images;android-34;android-wear;arm64-v8a" \
+  -d wearos_small_round
 ```
 
-Start it whenever you want to iterate:
+Start whichever one you want to iterate on:
 
 ```bash
 $ANDROID_HOME/emulator/emulator -avd vertrek-wear -no-window -no-audio -no-boot-anim
+$ANDROID_HOME/emulator/emulator -avd vertrek-wear-small -no-window -no-audio -no-boot-anim
 # drop -no-window if you want to see the round watch face on screen
 ```
 
@@ -264,10 +273,11 @@ Wait for it to finish booting (`adb devices` shows `device`, not
 cd wear && ./gradlew installDebug
 ```
 
-`installDebug` targets whichever device/emulator `adb` currently sees —
-if both a physical watch and the emulator are connected, pass
-`-Pandroid.testInstrumentationRunnerArguments` or just disconnect one
-(`adb -s <serial> ...`) to avoid ambiguity.
+`installDebug` installs on every connected device/emulator `adb` sees —
+running both AVDs at once installs on both in one command, useful for
+exactly this kind of side-by-side screen-size comparison. Target just
+one with `adb -s <serial> install -r app/build/outputs/apk/debug/app-debug.apk`
+instead if you only want it on one.
 
 As on a real watch, **the tile is not added automatically** —
 `installDebug` only installs the app. Add it the same way you would on
