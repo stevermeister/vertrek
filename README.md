@@ -4,8 +4,12 @@ A Cloudflare Worker + Wear OS tile that shows the next few departures for
 **one fixed commute route** on the Dutch railway (NS) network, straight on
 your watch face.
 
-![Mockup of the watch tile](docs/tile-placeholder.svg)
-*(placeholder mockup — not a real screenshot yet)*
+<p align="center">
+  <img src="docs/screenshots/tile-454.png" width="260" alt="The watch tile on a 454x454 round screen">
+  &nbsp;&nbsp;&nbsp;
+  <img src="docs/screenshots/tile-384.png" width="220" alt="The watch tile on a 384x384 round screen">
+</p>
+<p align="center"><em>The tile on a 454x454 and a 384x384 round screen.</em></p>
 
 You deploy your own Worker, with your own NS API key and your own two
 stations. There is no shared instance, no server run by the author, and
