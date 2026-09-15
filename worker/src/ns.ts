@@ -109,7 +109,37 @@ export function toCompactTrips(
   response: NsTripsResponse,
   limit: number,
 ): CompactTrip[] {
-  return response.trips.slice(0, limit).map(toCompactTrip);
+  return dedupeByPlannedDeparture(response.trips).slice(0, limit).map(toCompactTrip);
+}
+
+/**
+ * NS's /trips response has been observed (live, during a disruption)
+ * returning two distinct advices sharing the same planned origin
+ * departure time — one cancelled, one not (a replacement train
+ * presented alongside the cancelled original in the same nominal
+ * slot). toCompactTrips() is a straight 1:1 map with no merge logic of
+ * its own, so a duplicate here always originates in NS's own response,
+ * never in this Worker — but it still wastes one of the caller's
+ * limited slots on a trip that isn't real. Deduped before the limit is
+ * applied, preferring the non-cancelled advice, so one physical
+ * departure slot never shows up twice.
+ */
+function dedupeByPlannedDeparture(trips: NsTrip[]): NsTrip[] {
+  const byPlannedDeparture = new Map<string, NsTrip>();
+  let unkeyedIndex = 0;
+  for (const trip of trips) {
+    const firstLeg = trip.legs[0] as NsLeg | undefined;
+    const key = firstLeg?.origin.plannedDateTime ?? `no-planned-time-${unkeyedIndex++}`;
+    const existing = byPlannedDeparture.get(key);
+    if (!existing || (isCancelled(existing) && !isCancelled(trip))) {
+      byPlannedDeparture.set(key, trip);
+    }
+  }
+  return Array.from(byPlannedDeparture.values());
+}
+
+function isCancelled(trip: NsTrip): boolean {
+  return trip.status === "CANCELLED" || trip.legs.some((l) => l.cancelled);
 }
 
 /**
@@ -154,7 +184,7 @@ function toCompactTrip(trip: NsTrip): CompactTrip {
     arrivalTime: actualArrival ?? new Date(0).toISOString(),
     delayMinutes: computeDelayMinutes(plannedDeparture, origin?.actualDateTime),
     track: origin?.actualTrack ?? origin?.plannedTrack ?? null,
-    cancelled: trip.status === "CANCELLED" || trip.legs.some((l) => l.cancelled),
+    cancelled: isCancelled(trip),
     crowdForecast: reduceCrowdForecast(trip.legs),
   };
 }

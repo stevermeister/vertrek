@@ -1,0 +1,128 @@
+{
+  "source": "HARMONY_REISINFO_STATIC",
+  "trips": [
+    {
+      "uid": "trip-cancelled-dup",
+      "plannedDurationInMinutes": 43,
+      "actualDurationInMinutes": 43,
+      "transfers": 1,
+      "status": "CANCELLED",
+      "optimal": false,
+      "legs": [
+        {
+          "idx": "0",
+          "name": "IC 2734",
+          "cancelled": true,
+          "direction": "Utrecht Centraal",
+          "origin": {
+            "name": "Amsterdam Centraal",
+            "plannedDateTime": "2026-11-02T13:36:00+0100",
+            "plannedTrack": "4b"
+          },
+          "destination": {
+            "name": "Breukelen",
+            "plannedDateTime": "2026-11-02T13:58:00+0100",
+            "plannedTrack": "2"
+          },
+          "product": {
+            "displayName": "Intercity",
+            "type": "TRAIN",
+            "number": "2734",
+            "operatorName": "NS"
+          }
+        },
+        {
+          "idx": "1",
+          "name": "IC 9911",
+          "cancelled": true,
+          "direction": "Utrecht Centraal",
+          "origin": {
+            "name": "Breukelen",
+            "plannedDateTime": "2026-11-02T14:00:00+0100",
+            "plannedTrack": "1"
+          },
+          "destination": {
+            "name": "Utrecht Centraal",
+            "plannedDateTime": "2026-11-02T14:19:00+0100",
+            "plannedTrack": "18"
+          },
+          "product": {
+            "displayName": "Intercity",
+            "type": "TRAIN",
+            "number": "9911",
+            "operatorName": "NS"
+          }
+        }
+      ]
+    },
+    {
+      "uid": "trip-replacement",
+      "plannedDurationInMinutes": 46,
+      "actualDurationInMinutes": 49,
+      "transfers": 0,
+      "status": "NORMAL",
+      "optimal": true,
+      "legs": [
+        {
+          "idx": "0",
+          "name": "SPR 5512",
+          "cancelled": false,
+          "direction": "Utrecht Centraal",
+          "origin": {
+            "name": "Amsterdam Centraal",
+            "plannedDateTime": "2026-11-02T13:36:00+0100",
+            "actualDateTime": "2026-11-02T13:39:00+0100",
+            "plannedTrack": "3a",
+            "actualTrack": "3a"
+          },
+          "destination": {
+            "name": "Utrecht Centraal",
+            "plannedDateTime": "2026-11-02T14:22:00+0100",
+            "actualDateTime": "2026-11-02T14:25:00+0100",
+            "plannedTrack": "18"
+          },
+          "product": {
+            "displayName": "Sprinter",
+            "type": "TRAIN",
+            "number": "5512",
+            "operatorName": "NS"
+          }
+        }
+      ]
+    },
+    {
+      "uid": "trip-later",
+      "plannedDurationInMinutes": 28,
+      "actualDurationInMinutes": 28,
+      "transfers": 0,
+      "status": "NORMAL",
+      "optimal": false,
+      "legs": [
+        {
+          "idx": "0",
+          "name": "IC 2740",
+          "cancelled": false,
+          "direction": "Utrecht Centraal",
+          "origin": {
+            "name": "Amsterdam Centraal",
+            "plannedDateTime": "2026-11-02T13:55:00+0100",
+            "actualDateTime": "2026-11-02T13:55:00+0100",
+            "plannedTrack": "4b"
+          },
+          "destination": {
+            "name": "Utrecht Centraal",
+            "plannedDateTime": "2026-11-02T14:23:00+0100",
+            "actualDateTime": "2026-11-02T14:23:00+0100",
+            "plannedTrack": "18"
+          },
+          "product": {
+            "displayName": "Intercity",
+            "type": "TRAIN",
+            "number": "2740",
+            "operatorName": "NS"
+          }
+        }
+      ]
+    }
+  ]
+}
