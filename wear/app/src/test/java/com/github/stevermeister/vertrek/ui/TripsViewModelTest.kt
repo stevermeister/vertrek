@@ -209,4 +209,51 @@ class TripsViewModelTest {
         assertTrue(refreshRequested)
         assertTrue((viewModel.uiState.value as TripsUiState.Content).isRefreshing)
     }
+
+    // Regression coverage for the tile-side loop found live (~20 refreshes
+    // in 90 seconds): onTileRequest() enqueued unconditionally, and a
+    // successful fetch's own cache write fed straight back into another
+    // enqueue via requestUpdate(). This ViewModel has its own would-be
+    // trigger point for the same shape of bug — uiState reactively observes
+    // the cache via Flow — so it needs the same guarantee: only an explicit
+    // user action enqueues, never an incidental state recomposition.
+    @Test
+    fun `a cache write from elsewhere never triggers a refresh enqueue`() = runTest {
+        val repository = newRepository()
+        repository.setDirectionOverride(Direction.AB)
+        var enqueueCount = 0
+        val viewModel =
+            TripsViewModel(repository, clock = fixedClock, onRefreshRequested = { enqueueCount++ })
+
+        viewModel.uiState.drop(1).first() // let the initial Content state land
+
+        // Simulates exactly what RefreshWorker does on success — a direct
+        // cache write, with nothing calling refresh()/onRefreshRequested.
+        repository.saveCached(
+            Direction.AB,
+            CachedTripsData(direction = "ab", trips = sampleTrips(), fetchedAtEpochMillis = fixedClock.millis()),
+        )
+
+        // Confirms the write actually propagated (otherwise this test would
+        // pass vacuously, having never exercised the reactive chain at all).
+        val updated = viewModel.uiState.value as TripsUiState.Content
+        assertEquals(sampleTrips(), (updated.body as TripsBody.Fresh).trips)
+        assertEquals(0, enqueueCount)
+    }
+
+    @Test
+    fun `calling refresh again while already refreshing enqueues only once`() = runTest {
+        val repository = newRepository()
+        repository.setDirectionOverride(Direction.AB)
+        var enqueueCount = 0
+        val viewModel =
+            TripsViewModel(repository, clock = fixedClock, onRefreshRequested = { enqueueCount++ })
+
+        viewModel.uiState.drop(1).first() // let the initial Content state land
+
+        viewModel.refresh()
+        viewModel.refresh() // e.g. a second completed drag before the first indicator clears
+
+        assertEquals(1, enqueueCount)
+    }
 }
