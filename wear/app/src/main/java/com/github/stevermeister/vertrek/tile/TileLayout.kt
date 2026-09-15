@@ -84,18 +84,18 @@ private fun MaterialScope.swapIcon(direction: Direction): LayoutElement {
 }
 
 /**
- * Both names come straight from the Worker's fromStationShort/
- * toStationShort — the user picks values short enough to fit (see
- * STATION_A_SHORT/STATION_B_SHORT in the README), so there's no
- * width-budgeting logic here beyond a maxLines=1 + ellipsize safety net.
- * The swap icon rides inline at the end, not on its own line above.
+ * Origin only — no arrow, no destination. The destination is implied by
+ * which cached direction is showing; the only thing that changes at a
+ * glance is where you're leaving from. Comes straight from the Worker's
+ * fromStationShort (see STATION_A_SHORT/STATION_B_SHORT in the README),
+ * short enough by construction that maxLines=1 + ellipsize is a safety
+ * net, not a load-bearing mechanism. The swap icon stays inline, pinned
+ * to the row's end by the origin text's own expand() width.
  */
 private fun MaterialScope.header(direction: Direction, cacheState: CacheState, clock: Clock): LayoutElement {
-    val stationNames = shortStationNamesOrNull(cacheState)
-    val fromName = stationNames?.first ?: "–"
-    var toName = stationNames?.second ?: "–"
+    var fromName = shortFromStationNameOrNull(cacheState) ?: "–"
     if (cacheState is CacheState.Stale) {
-        toName = "$toName · ${cacheState.data.ageMinutes(clock)}m old"
+        fromName = "$fromName · ${cacheState.data.ageMinutes(clock)}m old"
     }
 
     return LayoutElementBuilders.Row.Builder()
@@ -106,7 +106,7 @@ private fun MaterialScope.header(direction: Direction, cacheState: CacheState, c
                 .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
                 .addContent(
                     text(
-                        "$fromName → $toName".layoutString,
+                        fromName.layoutString,
                         typography = Typography.LABEL_SMALL,
                         maxLines = 1,
                         overflow = LayoutElementBuilders.TEXT_OVERFLOW_ELLIPSIZE,
@@ -118,10 +118,10 @@ private fun MaterialScope.header(direction: Direction, cacheState: CacheState, c
         .build()
 }
 
-private fun shortStationNamesOrNull(cacheState: CacheState): Pair<String, String>? =
+private fun shortFromStationNameOrNull(cacheState: CacheState): String? =
     when (cacheState) {
-        is CacheState.Fresh -> cacheState.data.fromStationShort to cacheState.data.toStationShort
-        is CacheState.Stale -> cacheState.data.fromStationShort to cacheState.data.toStationShort
+        is CacheState.Fresh -> cacheState.data.fromStationShort
+        is CacheState.Stale -> cacheState.data.fromStationShort
         is CacheState.NoData -> null
     }
 
@@ -302,11 +302,19 @@ private fun MaterialScope.crowdDots(crowdForecast: String): LayoutElement? {
     return row.build()
 }
 
+// Root cause of a real, verified "Box set to wrap but contents are
+// unmeasurable" warning on-device: an empty Box with one dimension left
+// at the default WRAP and zero children has nothing for the real
+// ProtoLayoutInflater to measure that axis against — it isn't just
+// benign library noise (confirmed by bisection: removing the missing
+// setHeight()/setWidth() call below eliminated the warning entirely on
+// a real emulator render). The cross axis of a spacer is never meant to
+// be flexible, so pin it to 0dp instead of leaving it WRAP.
 private fun spacer(width: DimensionBuilders.ContainerDimension): LayoutElement =
-    LayoutElementBuilders.Box.Builder().setWidth(width).build()
+    LayoutElementBuilders.Box.Builder().setWidth(width).setHeight(DimensionBuilders.dp(0f)).build()
 
 private fun verticalSpacer(height: DimensionBuilders.ContainerDimension): LayoutElement =
-    LayoutElementBuilders.Box.Builder().setHeight(height).build()
+    LayoutElementBuilders.Box.Builder().setHeight(height).setWidth(DimensionBuilders.dp(0f)).build()
 
 private fun MaterialScope.noDataContent(reason: NoDataReason): LayoutElement {
     val (message, detail) =
