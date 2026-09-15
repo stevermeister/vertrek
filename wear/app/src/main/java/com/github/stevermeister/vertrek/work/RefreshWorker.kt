@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.wear.tiles.TileService
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
@@ -15,6 +16,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.github.stevermeister.vertrek.BuildConfig
 import com.github.stevermeister.vertrek.data.CachedTripsData
+import com.github.stevermeister.vertrek.data.Direction
 import com.github.stevermeister.vertrek.data.KtorWorkerClient
 import com.github.stevermeister.vertrek.data.NoDataReason
 import com.github.stevermeister.vertrek.data.TripsRepository
@@ -38,7 +40,7 @@ class RefreshWorker(
     override suspend fun doWork(): Result {
         return try {
             val repository = TripsRepository(applicationContext.tripsDataStore)
-            val direction = resolveDirection(repository.getDirectionOverride(), Clock.systemDefaultZone())
+            val direction = resolveWorkDirection(inputData, repository.getDirectionOverride(), Clock.systemDefaultZone())
 
             logActiveNetwork(applicationContext)
 
@@ -122,11 +124,35 @@ class RefreshWorker(
         // needed to diagnose a "No data" report without guessing.
         private const val TAG = "VertrekRefresh"
         private const val UNIQUE_WORK_NAME = "vertrek_refresh"
+        internal const val KEY_DIRECTION_PARAM = "direction_param"
 
-        fun enqueue(context: Context) {
+        /**
+         * [direction], when given, is fetched exactly as-is — no re-resolving
+         * against the DataStore override inside doWork(). This closes a real
+         * race: VertrekTileService.onTileRequest() persists a tapped
+         * direction via a fire-and-forget `ioScope.launch { setDirectionOverride(...) }`
+         * and immediately calls this, with no ordering guarantee that the
+         * write lands before doWork() would have read it back. Re-resolving
+         * independently could fetch/cache the *previous* direction —
+         * leaving the one actually on screen still stale, forcing one more
+         * enqueue on the next request before it self-corrects. Passing the
+         * already-decided direction through removes the second, independent
+         * resolution entirely, not just narrows its timing window.
+         *
+         * Left null for callers with no tap-derived direction of their own
+         * (MainActivity's pull-to-refresh) — doWork() falls back to the
+         * plain override-or-time-of-day resolution, which is exactly what
+         * that caller's own displayed direction already uses.
+         */
+        fun enqueue(context: Context, direction: Direction? = null) {
+            val inputData =
+                direction?.let { Data.Builder().putString(KEY_DIRECTION_PARAM, it.paramValue).build() }
+                    ?: Data.EMPTY
+
             val request =
                 OneTimeWorkRequestBuilder<RefreshWorker>()
                     .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                    .setInputData(inputData)
                     .setConstraints(
                         Constraints.Builder()
                             .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -137,6 +163,11 @@ class RefreshWorker(
             WorkManager.getInstance(context)
                 .enqueueUniqueWork(UNIQUE_WORK_NAME, ExistingWorkPolicy.REPLACE, request)
         }
+
+        /** Package-visible for testing; see the doc on enqueue() for why this exists. */
+        internal fun resolveWorkDirection(inputData: Data, override: Direction?, clock: Clock): Direction =
+            inputData.getString(KEY_DIRECTION_PARAM)?.let { Direction.fromParam(it) }
+                ?: resolveDirection(override, clock)
 
         /**
          * Logs which transports the active network reports and whether it's

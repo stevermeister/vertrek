@@ -4,6 +4,7 @@ import androidx.wear.protolayout.TimelineBuilders.Timeline
 import androidx.wear.tiles.RequestBuilders
 import androidx.wear.tiles.TileBuilders
 import androidx.wear.tiles.TileService
+import com.github.stevermeister.vertrek.data.CacheFreshness
 import com.github.stevermeister.vertrek.data.CacheState
 import com.github.stevermeister.vertrek.data.TripsRepository
 import com.github.stevermeister.vertrek.data.cacheStateOf
@@ -20,7 +21,16 @@ import kotlinx.coroutines.runBlocking
 // Rows no longer show a relative "N min" figure, so nothing on screen
 // changes minute to minute anymore — a shorter interval just burned
 // battery for redraws nobody could see.
-private const val FRESHNESS_INTERVAL_MILLIS = 180_000L
+//
+// Derived from CacheFreshness.FRESH_THRESHOLD, not a separate constant:
+// shouldEnqueueRefresh() below gates on that same threshold, and nothing
+// enforced them being equal before. Raising one without the other would
+// silently reopen the self-feeding refresh loop this file was fixed for
+// — either the system re-requests more often than the cache can go
+// stale (pointless extra requests), or the cache goes stale before the
+// system asks again while requestUpdate() from an unrelated trigger
+// keeps finding it non-Fresh sooner than intended.
+private val FRESHNESS_INTERVAL_MILLIS = CacheFreshness.FRESH_THRESHOLD.toMillis()
 
 class VertrekTileService : TileService() {
 
@@ -51,7 +61,10 @@ class VertrekTileService : TileService() {
         val cacheState = cacheStateOf(cached, lastFailureReason, clock)
 
         if (shouldEnqueueRefresh(cacheState)) {
-            RefreshWorker.enqueue(applicationContext)
+            // Pass effectiveDirection explicitly rather than letting
+            // RefreshWorker re-resolve its own — see the doc on
+            // RefreshWorker.enqueue() for the race this closes.
+            RefreshWorker.enqueue(applicationContext, effectiveDirection)
         }
 
         val layoutElement =
