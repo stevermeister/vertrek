@@ -1,6 +1,9 @@
 package com.github.stevermeister.vertrek.work
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.util.Log
 import androidx.wear.tiles.TileService
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -37,6 +40,8 @@ class RefreshWorker(
             val repository = TripsRepository(applicationContext.tripsDataStore)
             val direction = resolveDirection(repository.getDirectionOverride(), Clock.systemDefaultZone())
 
+            logActiveNetwork(applicationContext)
+
             val httpClient = createWorkerHttpClient()
             val outcome =
                 try {
@@ -69,15 +74,28 @@ class RefreshWorker(
                         )
                         Result.success()
                     }
-                    is WorkerOutcome.Unauthorized, is WorkerOutcome.ServerMisconfigured -> {
+                    is WorkerOutcome.Unauthorized -> {
+                        Log.w(TAG, "Worker rejected the request: 401 Unauthorized, body=${outcome.message}")
+                        repository.setLastFailureReason(direction, NoDataReason.AUTH_REJECTED)
+                        Result.failure()
+                    }
+                    is WorkerOutcome.ServerMisconfigured -> {
+                        Log.w(TAG, "Worker is misconfigured: 500, body=${outcome.message}")
                         repository.setLastFailureReason(direction, NoDataReason.AUTH_REJECTED)
                         Result.failure()
                     }
                     is WorkerOutcome.HttpError -> {
+                        Log.w(TAG, "Worker returned an unexpected status: ${outcome.status}, body=${outcome.message}")
                         repository.setLastFailureReason(direction, NoDataReason.NETWORK_DOWN)
                         Result.failure()
                     }
                     is WorkerOutcome.NetworkFailure -> {
+                        Log.e(
+                            TAG,
+                            "Network failure calling the Worker: ${outcome.cause::class.qualifiedName}: " +
+                                "${outcome.cause.message}",
+                            outcome.cause,
+                        )
                         repository.setLastFailureReason(direction, NoDataReason.NETWORK_DOWN)
                         // A network hiccup is worth WorkManager's own retry; the
                         // others won't fix themselves by retrying immediately.
@@ -93,11 +111,16 @@ class RefreshWorker(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            Log.e(TAG, "Unexpected exception in doWork(): ${e::class.qualifiedName}: ${e.message}", e)
             Result.retry()
         }
     }
 
     companion object {
+        // Single tag for every log line this class emits, network-transport
+        // logging included — `adb logcat -s VertrekRefresh` gets everything
+        // needed to diagnose a "No data" report without guessing.
+        private const val TAG = "VertrekRefresh"
         private const val UNIQUE_WORK_NAME = "vertrek_refresh"
 
         fun enqueue(context: Context) {
@@ -113,6 +136,36 @@ class RefreshWorker(
 
             WorkManager.getInstance(context)
                 .enqueueUniqueWork(UNIQUE_WORK_NAME, ExistingWorkPolicy.REPLACE, request)
+        }
+
+        /**
+         * Logs which transports the active network reports and whether it's
+         * validated (has a working path to the internet, not just a link).
+         * Wear OS can route background requests over the phone's Bluetooth
+         * companion proxy even when a Wi-Fi-connected adb shell would use
+         * Wi-Fi directly — this makes that distinction visible in logs
+         * instead of left to guessing from timing.
+         */
+        private fun logActiveNetwork(context: Context) {
+            val connectivityManager =
+                context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            val network = connectivityManager?.activeNetwork
+            val capabilities = network?.let { connectivityManager.getNetworkCapabilities(it) }
+
+            if (capabilities == null) {
+                Log.w(TAG, "Active network: none (no active network or capabilities unavailable)")
+                return
+            }
+
+            val transports =
+                buildList {
+                    if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) add("WIFI")
+                    if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH)) add("BLUETOOTH")
+                    if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) add("CELLULAR")
+                }
+            val validated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+
+            Log.i(TAG, "Active network: transports=$transports validated=$validated ($network)")
         }
     }
 }

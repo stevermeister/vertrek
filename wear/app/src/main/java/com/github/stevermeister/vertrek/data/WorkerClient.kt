@@ -1,5 +1,6 @@
 package com.github.stevermeister.vertrek.data
 
+import com.github.stevermeister.vertrek.BuildConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.cio.CIO
@@ -13,7 +14,6 @@ import java.io.IOException
 import kotlinx.serialization.json.Json
 
 private const val VERTREK_KEY_HEADER = "X-Vertrek-Key"
-private const val REQUEST_TIMEOUT_MILLIS = 5_000L
 
 /** Distinct outcomes instead of a generic failure — callers need to react differently to each. */
 sealed interface WorkerOutcome {
@@ -28,10 +28,16 @@ interface WorkerClient {
     suspend fun fetchNext(direction: Direction): WorkerOutcome
 }
 
+// Sourced from local.properties via BuildConfig (see README Setup step 3)
+// so these can be tuned per-network without editing code — the original
+// single 5s REQUEST_TIMEOUT_MILLIS was too tight over a phone Bluetooth/
+// hotspot companion link and masked itself as "Network Unavailable".
 fun createWorkerHttpClient(engine: HttpClientEngine = CIO.create()): HttpClient =
     HttpClient(engine) {
         install(HttpTimeout) {
-            requestTimeoutMillis = REQUEST_TIMEOUT_MILLIS
+            requestTimeoutMillis = BuildConfig.REQUEST_TIMEOUT_MILLIS
+            connectTimeoutMillis = BuildConfig.CONNECT_TIMEOUT_MILLIS
+            socketTimeoutMillis = BuildConfig.SOCKET_TIMEOUT_MILLIS
         }
         expectSuccess = false
     }

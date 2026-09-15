@@ -165,6 +165,16 @@ source. They're where the app sends requests and the key it
 authenticates with. Must match your deployed Worker's URL and its
 `VERTREK_KEY` secret exactly, or every request comes back `401`.
 
+Optionally, also tune the HTTP client's timeouts (milliseconds) — these
+default to 10s/20s/20s if unset, sized for a phone Bluetooth/hotspot
+companion link rather than just Wi-Fi:
+
+```properties
+CONNECT_TIMEOUT_MILLIS=10000
+SOCKET_TIMEOUT_MILLIS=20000
+REQUEST_TIMEOUT_MILLIS=20000
+```
+
 Station display names (e.g. "Almere Oostvaarders → Amsterdam
 Centraal") aren't build config — they come from the Worker's `/next`
 response, which resolves them server-side from your `STATION_A`/

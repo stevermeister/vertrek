@@ -46,6 +46,24 @@ android {
             "VERTREK_API_KEY",
             "\"${localProperties.getProperty("VERTREK_API_KEY", "")}\"",
         )
+        // Ktor HttpTimeout plugin values (WorkerClient.kt) — tunable per
+        // network without editing code. Defaults match what actually works
+        // over a phone Bluetooth/hotspot companion link, not just Wi-Fi.
+        buildConfigField(
+            "long",
+            "CONNECT_TIMEOUT_MILLIS",
+            "${localProperties.getProperty("CONNECT_TIMEOUT_MILLIS", "10000")}L",
+        )
+        buildConfigField(
+            "long",
+            "SOCKET_TIMEOUT_MILLIS",
+            "${localProperties.getProperty("SOCKET_TIMEOUT_MILLIS", "20000")}L",
+        )
+        buildConfigField(
+            "long",
+            "REQUEST_TIMEOUT_MILLIS",
+            "${localProperties.getProperty("REQUEST_TIMEOUT_MILLIS", "20000")}L",
+        )
         // No STATION_A/STATION_B here: station display names come from the
         // Worker response (fromStationName/toStationName), not from build
         // config — see TripDto.kt / the header in TileLayout.kt/MainActivity.kt.

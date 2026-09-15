@@ -5,6 +5,9 @@
 
     <!-- Standalone: this app has no phone companion module. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- ConnectivityManager.getActiveNetwork()/getNetworkCapabilities() in
+         RefreshWorker's transport logging require this or they throw. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:allowBackup="true"
