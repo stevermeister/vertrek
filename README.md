@@ -181,7 +181,8 @@ response, which resolves them server-side from your `STATION_A`/
 `STATION_B` codes (see step 2). The app never configures or sends
 station codes itself.
 
-Build a debug APK:
+Build a debug APK — **emulators only, never the physical watch** (see
+why in the install section below):
 
 ```bash
 cd wear
@@ -189,7 +190,7 @@ cd wear
 # output: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-#### Signed release build (optional, for a longer-lived sideload)
+#### Signed release build (required for the physical watch)
 
 Generate a local keystore once (never commit it — already gitignored):
 
@@ -219,6 +220,17 @@ on a device.
 
 #### Install on a Galaxy Watch over wireless debugging
 
+**Always install the signed release build on a physical watch, never
+debug.** Android refuses an in-place update whenever the new APK's
+signature doesn't match the one already installed
+(`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) — it doesn't matter whether the
+mismatch is debug-vs-release or two different debug keystores on two
+machines. Once a signed release build is on the watch, every later
+install to that same watch must be built and signed the same way, or it
+will fail (or, if you deliberately uninstall first, wipe the app's
+on-device cache). Debug builds are for the emulators, where there's
+nothing to preserve and no signature history to collide with.
+
 On the watch: **Settings → About watch → tap "Software version" 7
 times** to unlock Developer options, then **Settings → Developer
 options** → enable **ADB debugging** and **Wireless debugging**. Open
@@ -238,10 +250,12 @@ adb connect <WATCH_IP>:<CONNECT_PORT>
 # 3. Confirm it's there
 adb devices
 
-# 4. Install (-r replaces an existing install, keeping app data)
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-# or, for a signed release build:
-adb install -r app/build/outputs/apk/release/app-release.apk
+# 4. Build the signed release build, then install it
+#    (-r replaces an existing install, keeping app data; --no-streaming
+#    is more reliable than the default streamed install over a flaky
+#    wireless-debugging link)
+./gradlew assembleRelease
+adb install -r --no-streaming app/build/outputs/apk/release/app-release.apk
 ```
 
 Pairing is one-time per watch/computer pair; after that, `adb connect`
@@ -291,11 +305,16 @@ Wait for it to finish booting (`adb devices` shows `device`, not
 cd wear && ./gradlew installDebug
 ```
 
-`installDebug` installs on every connected device/emulator `adb` sees —
-running both AVDs at once installs on both in one command, useful for
-exactly this kind of side-by-side screen-size comparison. Target just
-one with `adb -s <serial> install -r app/build/outputs/apk/debug/app-debug.apk`
-instead if you only want it on one.
+`installDebug` installs on **every** connected device/emulator `adb`
+sees — running both AVDs at once installs on both in one command, useful
+for exactly this kind of side-by-side screen-size comparison. **If the
+physical watch is also connected when you run this, disconnect it
+first** (`adb disconnect <WATCH_IP>:<PORT>`) — `installDebug` doesn't
+know about the debug-on-emulator/release-on-watch split above, and will
+either fail loudly against the watch's release signature or, worse,
+succeed and leave a debug build on it. Target just one device with
+`adb -s <serial> install -r app/build/outputs/apk/debug/app-debug.apk`
+instead if you want more control.
 
 As on a real watch, **the tile is not added automatically** —
 `installDebug` only installs the app. Add it the same way you would on
