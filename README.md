@@ -230,6 +230,55 @@ Pairing is one-time per watch/computer pair; after that, `adb connect`
 alone is enough (the watch's IP can change between networks, so re-check
 the Wireless debugging screen if `connect` fails).
 
+#### Or: run it on a Wear OS emulator instead of a physical watch
+
+No physical watch needed for day-to-day iteration. One-time setup:
+
+```bash
+# From $ANDROID_HOME/cmdline-tools/latest/bin (or wherever yours lives).
+# Wear OS 5 / API 34, arm64-v8a, no Google Play — matches the physical
+# Galaxy Watch closely enough for this app, and is the architecture your
+# Mac's own CPU can run without emulation-of-emulation overhead on Apple
+# Silicon.
+sdkmanager "emulator" "system-images;android-34;android-wear;arm64-v8a"
+
+# "Wear OS Large Round" is the 454x454 round profile — the actual size
+# used by most current round watches. Answer "no" to the "custom
+# hardware profile" prompt.
+avdmanager create avd -n vertrek-wear \
+  -k "system-images;android-34;android-wear;arm64-v8a" \
+  -d wearos_large_round
+```
+
+Start it whenever you want to iterate:
+
+```bash
+$ANDROID_HOME/emulator/emulator -avd vertrek-wear -no-window -no-audio -no-boot-anim
+# drop -no-window if you want to see the round watch face on screen
+```
+
+Wait for it to finish booting (`adb devices` shows `device`, not
+`offline`), then the same one-liner you'd use for any change:
+
+```bash
+cd wear && ./gradlew installDebug
+```
+
+`installDebug` targets whichever device/emulator `adb` currently sees —
+if both a physical watch and the emulator are connected, pass
+`-Pandroid.testInstrumentationRunnerArguments` or just disconnect one
+(`adb -s <serial> ...`) to avoid ambiguity.
+
+As on a real watch, **the tile is not added automatically** —
+`installDebug` only installs the app. Add it the same way you would on
+your own wrist: long-press the watch face → **Edit** → pick a tile slot
+→ find "Vertrek" in the tile list.
+
+The emulator reaches the public internet like any other Android
+device/VM — no extra network setup is needed to hit your deployed
+Worker; `NS_WORKER_BASE_URL`/`VERTREK_API_KEY` from `local.properties`
+work unchanged.
+
 ---
 
 ## Worker: API reference
