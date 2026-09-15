@@ -16,7 +16,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
-private const val FRESHNESS_INTERVAL_MILLIS = 60_000L
+// Rows no longer show a relative "N min" figure, so nothing on screen
+// changes minute to minute anymore — a shorter interval just burned
+// battery for redraws nobody could see.
+private const val FRESHNESS_INTERVAL_MILLIS = 180_000L
 
 class VertrekTileService : TileService() {
 

@@ -32,13 +32,11 @@ import com.github.stevermeister.vertrek.data.ageMinutes
 import com.github.stevermeister.vertrek.data.formattedArrivalTime
 import com.github.stevermeister.vertrek.data.formattedDepartureTime
 import com.github.stevermeister.vertrek.data.opposite
-import com.github.stevermeister.vertrek.data.parsedDepartureInstant
 import java.time.Clock
-import java.time.Duration
 
-// Matches the Worker's MAX_TRIPS (worker/wrangler.jsonc) — NS's own
-// per-call cap, not a number either side can raise on its own.
-private const val MAX_ROWS = 5
+// Matches the Worker's MAX_TRIPS (worker/wrangler.jsonc) — four rows, a
+// row-layout choice, not NS's own 5-per-call cap.
+private const val MAX_ROWS = 4
 
 fun buildTileLayout(
     context: Context,
@@ -49,7 +47,7 @@ fun buildTileLayout(
 ): LayoutElement =
     materialScope(context = context, deviceConfiguration = deviceParameters, allowDynamicTheme = false) {
         primaryLayout(
-            titleSlot = { header(direction, cacheState, clock) },
+            titleSlot = { swapIcon(direction) },
             mainSlot = { mainContent(cacheState, clock) },
             onClick = clickable(action = launchMainActivity(context)),
         )
@@ -59,12 +57,28 @@ private fun launchMainActivity(context: Context): ActionBuilders.Action =
     ActionBuilders.launchAction(ComponentName(context, MainActivity::class.java))
 
 /**
- * Full station names on one line: the first name and the arrow always
- * render in full; only the trailing name (and, if stale, its age suffix)
- * ellipsizes if there isn't room. A small swap icon sits at the end —
- * not a large button.
+ * Small swap icon only — material3's titleSlot wraps its content in its
+ * own header layout sized for a short title, not a full route string;
+ * putting "$fromName → $toName" there truncated to a couple of
+ * characters ("Al…") no matter how the text itself was built. The full
+ * station-name header lives in mainSlot instead, as an ordinary row with
+ * the same explicit expand() width as the trip rows below it.
  */
-private fun MaterialScope.header(direction: Direction, cacheState: CacheState, clock: Clock): LayoutElement {
+private fun MaterialScope.swapIcon(direction: Direction): LayoutElement {
+    val swapClickable = clickable(action = loadAction(), id = swapClickableId(direction.opposite()))
+    return LayoutElementBuilders.Box.Builder()
+        .setModifiers(Modifiers.Builder().setClickable(swapClickable).build())
+        .addContent(text("⇄".layoutString, typography = Typography.LABEL_SMALL))
+        .build()
+}
+
+/**
+ * Full station names on one line, ellipsized as a whole (truncating from
+ * the end lands on the trailing name, which is the desired behaviour)
+ * rather than two separately-sized texts — the two-text/weight()-style
+ * split used on MainActivity hit its own, unrelated rendering issue here.
+ */
+private fun MaterialScope.header(cacheState: CacheState, clock: Clock): LayoutElement {
     val stationNames = stationNamesOrNull(cacheState)
     val fromName = stationNames?.first ?: "–"
     var toName = stationNames?.second ?: "–"
@@ -72,30 +86,16 @@ private fun MaterialScope.header(direction: Direction, cacheState: CacheState, c
         toName = "$toName · ${cacheState.data.ageMinutes(clock)}m old"
     }
 
-    val swapClickable = clickable(action = loadAction(), id = swapClickableId(direction.opposite()))
-
-    return LayoutElementBuilders.Row.Builder()
+    return LayoutElementBuilders.Box.Builder()
         .setWidth(DimensionBuilders.expand())
-        .addContent(text("$fromName → ".layoutString, typography = Typography.LABEL_SMALL, maxLines = 1))
+        .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
         .addContent(
-            LayoutElementBuilders.Box.Builder()
-                .setWidth(DimensionBuilders.expand())
-                .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
-                .addContent(
-                    text(
-                        toName.layoutString,
-                        typography = Typography.LABEL_SMALL,
-                        maxLines = 1,
-                        overflow = LayoutElementBuilders.TEXT_OVERFLOW_ELLIPSIZE,
-                    ),
-                )
-                .build(),
-        )
-        .addContent(
-            LayoutElementBuilders.Box.Builder()
-                .setModifiers(Modifiers.Builder().setClickable(swapClickable).build())
-                .addContent(text("⇄".layoutString, typography = Typography.LABEL_SMALL))
-                .build(),
+            text(
+                "$fromName → $toName".layoutString,
+                typography = Typography.LABEL_SMALL,
+                maxLines = 1,
+                overflow = LayoutElementBuilders.TEXT_OVERFLOW_ELLIPSIZE,
+            ),
         )
         .build()
 }
@@ -107,26 +107,35 @@ private fun stationNamesOrNull(cacheState: CacheState): Pair<String, String>? =
         is CacheState.NoData -> null
     }
 
-private fun MaterialScope.mainContent(cacheState: CacheState, clock: Clock): LayoutElement =
+private fun MaterialScope.mainContent(cacheState: CacheState, clock: Clock): LayoutElement {
+    val column = LayoutElementBuilders.Column.Builder().setWidth(DimensionBuilders.expand())
+    column.addContent(header(cacheState, clock))
     when (cacheState) {
-        is CacheState.Fresh -> tripsColumn(cacheState.data, clock)
-        is CacheState.Stale -> tripsColumn(cacheState.data, clock)
-        is CacheState.NoData -> noDataContent(cacheState.reason)
+        is CacheState.Fresh -> column.addContent(tripsColumn(cacheState.data))
+        is CacheState.Stale -> column.addContent(tripsColumn(cacheState.data))
+        is CacheState.NoData -> column.addContent(noDataContent(cacheState.reason))
     }
+    return column.build()
+}
 
-private fun MaterialScope.tripsColumn(data: CachedTripsData, clock: Clock): LayoutElement {
+private fun MaterialScope.tripsColumn(data: CachedTripsData): LayoutElement {
     val shown = data.trips.take(MAX_ROWS)
     if (shown.isEmpty()) {
         return text("No upcoming trips".layoutString, typography = Typography.BODY_SMALL, maxLines = 1)
     }
 
-    val column = LayoutElementBuilders.Column.Builder()
-    shown.forEachIndexed { index, trip -> column.addContent(tripRow(trip, isFirstRow = index == 0, clock)) }
+    // Explicit width required: each row is a Row with setWidth(expand()),
+    // and protolayout's real renderer (unlike Robolectric's test renderer)
+    // refuses to inflate an expand()-width child inside a wrap-width
+    // parent at all — "Column set to wrap but contents are unmeasurable" —
+    // silently dropping the whole column rather than just the row.
+    val column = LayoutElementBuilders.Column.Builder().setWidth(DimensionBuilders.expand())
+    shown.forEach { trip -> column.addContent(tripRow(trip)) }
     return column.build()
 }
 
-private fun MaterialScope.tripRow(trip: TripDto, isFirstRow: Boolean, clock: Clock): LayoutElement {
-    val zonesRowBuilder =
+private fun MaterialScope.tripRow(trip: TripDto): LayoutElement {
+    val rowBuilder =
         LayoutElementBuilders.Row.Builder()
             .setWidth(DimensionBuilders.expand())
             .addContent(timesBlock(trip))
@@ -135,29 +144,47 @@ private fun MaterialScope.tripRow(trip: TripDto, isFirstRow: Boolean, clock: Clo
 
     val dots = crowdDots(trip.crowdForecast)
     if (dots != null) {
-        zonesRowBuilder.addContent(spacer(DimensionBuilders.dp(4f)))
-        zonesRowBuilder.addContent(dots)
+        rowBuilder.addContent(spacer(DimensionBuilders.dp(4f)))
+        rowBuilder.addContent(dots)
     }
-    val zonesRow = zonesRowBuilder.build()
-
-    if (!isFirstRow) return zonesRow
-
-    return LayoutElementBuilders.Column.Builder()
-        .addContent(text(minutesUntilLabel(trip, clock).layoutString, typography = Typography.DISPLAY_SMALL, maxLines = 1))
-        .addContent(zonesRow)
-        .build()
+    return rowBuilder.build()
 }
 
-/** "HH:mm +N - HH:mm", delay inline in the error colour. Struck through when cancelled. */
+/**
+ * Departure time is primary — larger, full weight — with the delay
+ * marker riding alongside it in the error colour. Arrival time is
+ * secondary: smaller and dimmer, after a separator dot. Both come from
+ * the Worker's planned departureTime (not the already-delay-adjusted
+ * actual time — see the comment on toCompactTrip() in worker/src/ns.ts),
+ * so "+N" here is additive on top of the displayed time, not a double
+ * count. Struck through when cancelled.
+ */
 private fun MaterialScope.timesBlock(trip: TripDto): LayoutElement {
     val row = LayoutElementBuilders.Row.Builder()
-    row.addContent(text(trip.formattedDepartureTime().layoutString, typography = Typography.BODY_SMALL, maxLines = 1))
+    row.addContent(
+        text(trip.formattedDepartureTime().layoutString, typography = Typography.TITLE_MEDIUM, maxLines = 1),
+    )
     if (trip.delayMinutes > 0) {
         row.addContent(
-            text(" +${trip.delayMinutes}".layoutString, typography = Typography.BODY_SMALL, color = colorScheme.error, maxLines = 1),
+            text(
+                " +${trip.delayMinutes}".layoutString,
+                typography = Typography.TITLE_MEDIUM,
+                color = colorScheme.error,
+                maxLines = 1,
+            ),
         )
     }
-    row.addContent(text(" - ${trip.formattedArrivalTime()}".layoutString, typography = Typography.BODY_SMALL, maxLines = 1))
+    row.addContent(
+        text(" · ".layoutString, typography = Typography.BODY_SMALL, color = colorScheme.onSurfaceVariant, maxLines = 1),
+    )
+    row.addContent(
+        text(
+            trip.formattedArrivalTime().layoutString,
+            typography = Typography.BODY_SMALL,
+            color = colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        ),
+    )
     val content = row.build()
     return if (trip.cancelled) strikethroughOverlay(content) else content
 }
@@ -242,10 +269,4 @@ private fun MaterialScope.noDataContent(reason: NoDataReason): LayoutElement {
         .addContent(text(message.layoutString, typography = Typography.TITLE_SMALL, maxLines = 1))
         .addContent(text(detail.layoutString, typography = Typography.BODY_SMALL, maxLines = 1))
         .build()
-}
-
-private fun minutesUntilLabel(trip: TripDto, clock: Clock): String {
-    val departure = trip.parsedDepartureInstant() ?: return "--"
-    val minutes = Duration.between(clock.instant(), departure).toMinutes().coerceAtLeast(0)
-    return "$minutes min"
 }

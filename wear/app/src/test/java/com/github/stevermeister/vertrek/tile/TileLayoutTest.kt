@@ -42,11 +42,6 @@ class TileLayoutTest {
             .setScreenShape(DeviceParametersBuilders.SCREEN_SHAPE_ROUND)
             .build()
 
-    private fun hasText(expected: String): LayoutElementMatcher =
-        LayoutElementMatcher("has text \"$expected\"") { element, _ ->
-            (element as? LayoutElementBuilders.Text)?.text?.value == expected
-        }
-
     private fun containsText(expectedSubstring: String): LayoutElementMatcher =
         LayoutElementMatcher("contains text \"$expectedSubstring\"") { element, _ ->
             (element as? LayoutElementBuilders.Text)?.text?.value?.contains(expectedSubstring) == true
@@ -107,9 +102,10 @@ class TileLayoutTest {
             fetchedAtEpochMillis = Instant.parse("2026-11-02T11:00:00Z").toEpochMilli(),
         )
 
-    // Two cancelled trips among five, non-adjacent (rows 1 and 3 of 0..4),
-    // so a strikethrough that leaks onto a neighbouring row would actually
-    // get caught rather than being indistinguishable from the right answer.
+    // Two cancelled trips among four (the tile's own MAX_ROWS), non-adjacent
+    // (rows 1 and 3 of 0..3), so a strikethrough that leaks onto a
+    // neighbouring row would actually get caught rather than being
+    // indistinguishable from the right answer.
     private fun sampleDataWithNonAdjacentCancellations(): CachedTripsData =
         CachedTripsData(
             direction = "ab",
@@ -121,7 +117,6 @@ class TileLayoutTest {
                     TripDto("2026-11-02T11:18:00Z", "2026-11-02T11:46:00Z", 0, "2", true, "UNKNOWN"),
                     TripDto("2026-11-02T11:33:00Z", "2026-11-02T12:12:00Z", 0, "3", false, "UNKNOWN"),
                     TripDto("2026-11-02T11:48:00Z", "2026-11-02T12:20:00Z", 0, "1", true, "UNKNOWN"),
-                    TripDto("2026-11-02T12:03:00Z", "2026-11-02T12:41:00Z", 0, "4b", false, "UNKNOWN"),
                 ),
             fetchedAtEpochMillis = Instant.parse("2026-11-02T11:00:00Z").toEpochMilli(),
         )
@@ -135,13 +130,6 @@ class TileLayoutTest {
         LayoutElementAssertionsProvider(layout).onElement(containsText("Almere Oostvaarders")).assertExists()
         LayoutElementAssertionsProvider(layout).onElement(containsText("Amsterdam Centraal")).assertExists()
         LayoutElementAssertionsProvider(layout).onElement(containsText("→")).assertExists()
-    }
-
-    @Test
-    fun `primary row shows minutes until departure`() {
-        val layout = layoutFor(Direction.AB, CacheState.Fresh(sampleData()))
-        // Departure is 11:07, "now" is fixed at 11:00 -> 7 minutes.
-        LayoutElementAssertionsProvider(layout).onElement(hasText("7 min")).assertExists()
     }
 
     @Test
