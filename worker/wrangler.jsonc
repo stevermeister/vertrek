@@ -17,14 +17,15 @@
     // your real stations there; see README Setup step 2.
     "STATION_A": "ASD",
     "STATION_B": "UT",
-    // Trips returned per request. 5 is NS's own per-call cap on this
-    // endpoint (verified live against a real key — previousAdvices/
-    // nextAdvices are decommissioned and do not raise it). Getting more
-    // than 5 would need a second NS call per request via the response's
+    // Trips returned per request. NS itself caps this endpoint at 5 per
+    // call (verified live against a real key — previousAdvices/nextAdvices
+    // are decommissioned and do not raise it); getting more than 5 would
+    // need a second NS call per request via the response's
     // scrollRequestForwardContext, which we've deliberately not built —
     // see the comment above fetchTrips() in worker/src/ns.ts. Raising this
-    // above 5 will not get you more trips.
-    "MAX_TRIPS": "5"
+    // above 5 will not get you more trips. We show only 4 of those 5 —
+    // the watch row layout's own choice, not an NS limit.
+    "MAX_TRIPS": "4"
   }
   // Two secrets are set separately via `wrangler secret put` — never store
   // them here:

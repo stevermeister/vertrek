@@ -142,11 +142,15 @@ function toCompactTrip(trip: NsTrip): CompactTrip {
   const destination = lastLeg?.destination;
 
   const plannedDeparture = origin?.plannedDateTime;
-  const actualDeparture = origin?.actualDateTime ?? plannedDeparture;
   const actualArrival = destination?.actualDateTime ?? destination?.plannedDateTime;
 
   return {
-    departureTime: actualDeparture ?? new Date(0).toISOString(),
+    // Planned, not actual: the client renders this with delayMinutes as a
+    // separate "+N" marker (as the NS app does). Sending the already-
+    // adjusted actual time here would double-count the delay on screen —
+    // e.g. planned 12:03 + 5 min actual delay would show "12:08 +5",
+    // implying a further 5-minute slip on top of an already-late time.
+    departureTime: plannedDeparture ?? new Date(0).toISOString(),
     arrivalTime: actualArrival ?? new Date(0).toISOString(),
     delayMinutes: computeDelayMinutes(plannedDeparture, origin?.actualDateTime),
     track: origin?.actualTrack ?? origin?.plannedTrack ?? null,

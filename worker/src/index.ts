@@ -1,7 +1,7 @@
 import { checkVertrekKey } from "./auth";
 import { extractStationNames, fetchTrips, NsApiError, toCompactTrips, type Env } from "./ns";
 
-const DEFAULT_MAX_TRIPS = 5;
+const DEFAULT_MAX_TRIPS = 4;
 const CACHE_TTL_SECONDS = 30;
 
 type Direction = "ab" | "ba";

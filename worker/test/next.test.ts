@@ -102,7 +102,7 @@ describe("GET /next auth", () => {
 });
 
 describe("GET /next", () => {
-  it("returns up to 5 compact trips for dir=ab, using the recorded NS fixture", async () => {
+  it("returns up to 4 compact trips for dir=ab, using the recorded NS fixture", async () => {
     mockNsTrips(env.STATION_A, env.STATION_B, fixture);
 
     const response = await authedFetch("https://worker.example/next?dir=ab");
@@ -119,13 +119,16 @@ describe("GET /next", () => {
     // from the NS response, not from any Worker-side station config.
     expect(json.fromStationName).toBe("Amsterdam Centraal");
     expect(json.toStationName).toBe("Utrecht Centraal");
-    // The fixture has 7 trips — this proves the cap still trims, not just that 5 fit.
-    expect(json.trips).toHaveLength(5);
+    // The fixture has 7 trips — this proves the cap still trims, not just that 4 fit.
+    expect(json.trips).toHaveLength(4);
 
     const [first, second] = json.trips as Array<Record<string, unknown>>;
 
     expect(first).toEqual({
-      departureTime: "2026-11-02T12:08:00+0100",
+      // Planned, not actual (12:08) — see the comment on toCompactTrip()
+      // in ns.ts. The client renders this with delayMinutes as a separate
+      // marker; sending the adjusted time here would double-count it.
+      departureTime: "2026-11-02T12:03:00+0100",
       arrivalTime: "2026-11-02T12:36:00+0100",
       delayMinutes: 5,
       track: "4b",
@@ -141,6 +144,18 @@ describe("GET /next", () => {
       cancelled: true,
       crowdForecast: "UNKNOWN",
     });
+  });
+
+  it("reports the planned departure time for a delayed trip, not the actual/adjusted one", async () => {
+    mockNsTrips(env.STATION_A, env.STATION_B, fixture);
+
+    const response = await authedFetch("https://worker.example/next?dir=ab");
+    const json = await response.json<{ trips: Array<{ departureTime: string; delayMinutes: number }> }>();
+
+    // trip-1: planned 12:03, actual 12:08 (5 min delay). The response must
+    // carry the planned time — the client adds the delay marker itself.
+    expect(json.trips[0]?.departureTime).toBe("2026-11-02T12:03:00+0100");
+    expect(json.trips[0]?.delayMinutes).toBe(5);
   });
 
   it("reduces a multi-leg trip's crowdForecast to its busiest leg", async () => {
@@ -159,8 +174,8 @@ describe("GET /next", () => {
     const response = await authedFetch("https://worker.example/next?dir=ab");
     const json = await response.json<{ trips: Array<{ crowdForecast: string }> }>();
 
-    // trip-4 (index 3) has no crowdForecast field on its only leg at all.
-    expect(json.trips[3]?.crowdForecast).toBe("UNKNOWN");
+    // trip-2 (index 1, cancelled) has no crowdForecast field on its only leg.
+    expect(json.trips[1]?.crowdForecast).toBe("UNKNOWN");
   });
 
   it("maps an unrecognised crowdForecast value to UNKNOWN rather than passing it through", async () => {
@@ -169,13 +184,11 @@ describe("GET /next", () => {
     const response = await authedFetch("https://worker.example/next?dir=ab");
     const json = await response.json<{ trips: Array<{ crowdForecast: string }> }>();
 
-    // trip-5 (index 4, the last trip inside the 5-trip cap) carries
+    // trip-4 (index 3, the last trip inside the 4-trip cap) carries
     // "UNRECOGNIZED_FUTURE_VALUE" on its leg. It must land here, not on
-    // trip-6/7 which the cap excludes entirely — otherwise this test
-    // would pass without ever exercising the defensive-parsing branch
-    // (as it previously did: it was silently testing the "missing field"
-    // path a second time).
-    expect(json.trips[4]?.crowdForecast).toBe("UNKNOWN");
+    // trip-5/6/7 which the cap excludes entirely — otherwise this test
+    // would pass without ever exercising the defensive-parsing branch.
+    expect(json.trips[3]?.crowdForecast).toBe("UNKNOWN");
   });
 
   it("falls back to the requested station codes as names when there are no trips to read names from", async () => {
