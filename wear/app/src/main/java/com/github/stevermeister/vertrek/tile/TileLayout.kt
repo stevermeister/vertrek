@@ -47,8 +47,7 @@ fun buildTileLayout(
 ): LayoutElement =
     materialScope(context = context, deviceConfiguration = deviceParameters, allowDynamicTheme = false) {
         primaryLayout(
-            titleSlot = { swapIcon(direction) },
-            mainSlot = { mainContent(cacheState, clock) },
+            mainSlot = { mainContent(direction, cacheState, clock) },
             onClick = clickable(action = launchMainActivity(context)),
         )
     }
@@ -56,16 +55,28 @@ fun buildTileLayout(
 private fun launchMainActivity(context: Context): ActionBuilders.Action =
     ActionBuilders.launchAction(ComponentName(context, MainActivity::class.java))
 
+// Default clickable() minimum touch target (Material's standard ~48dp
+// accessible tap target) was consuming as much header row width as the
+// entire ORIGIN_HEADER_WIDTH budget below — it, not the origin, was why
+// the destination still didn't fit after tightening the origin down to
+// where it vanished with no gain. A small icon in a glance-only tile
+// (the primary swap gesture lives on MainActivity) doesn't need the
+// full accessible minimum.
+private const val SWAP_ICON_TOUCH_TARGET_DP = 18f
+
 /**
- * Small swap icon only — material3's titleSlot wraps its content in its
- * own header layout sized for a short title, not a full route string;
- * putting "$fromName → $toName" there truncated to a couple of
- * characters ("Al…") no matter how the text itself was built. The full
- * station-name header lives in mainSlot instead, as an ordinary row with
- * the same explicit expand() width as the trip rows below it.
+ * Small swap icon, inline at the end of the header row — not
+ * titleSlot, which reserved its own line above the header for it and
+ * wasted vertical space no other row got to use.
  */
 private fun MaterialScope.swapIcon(direction: Direction): LayoutElement {
-    val swapClickable = clickable(action = loadAction(), id = swapClickableId(direction.opposite()))
+    val swapClickable =
+        clickable(
+            loadAction(),
+            swapClickableId(direction.opposite()),
+            SWAP_ICON_TOUCH_TARGET_DP,
+            SWAP_ICON_TOUCH_TARGET_DP,
+        )
     return LayoutElementBuilders.Box.Builder()
         .setModifiers(Modifiers.Builder().setClickable(swapClickable).build())
         .addContent(text("⇄".layoutString, typography = Typography.LABEL_SMALL))
@@ -77,17 +88,21 @@ private fun MaterialScope.swapIcon(direction: Direction): LayoutElement {
 // origin sharing the row with a long destination could shrink all the
 // way to zero and disappear entirely — reproduced on the 384x384 AVD.
 // A small fixed budget guarantees the origin always shows a character
-// or two before its own ellipsis.
-private val ORIGIN_HEADER_WIDTH = DimensionBuilders.dp(36f)
+// or two before its own ellipsis. Kept tight — every dp here is a dp
+// the destination doesn't get — since MainActivity gives the
+// destination the whole name at 454 and this should match that as
+// closely as the fixed-width approach allows.
+private val ORIGIN_HEADER_WIDTH = DimensionBuilders.dp(20f)
 
 /**
  * The origin is ellipsized, not the destination: you know where you're
  * leaving from, you care where you're going. The origin gets a small
  * fixed width (see ORIGIN_HEADER_WIDTH); the destination gets the rest
  * via expand(), with its own maxLines=1 + ellipsize as a fallback for
- * the rare screen where even that isn't enough room for both.
+ * the rare screen where even that isn't enough room for both. The swap
+ * icon rides inline at the end, not on its own line above.
  */
-private fun MaterialScope.header(cacheState: CacheState, clock: Clock): LayoutElement {
+private fun MaterialScope.header(direction: Direction, cacheState: CacheState, clock: Clock): LayoutElement {
     val stationNames = stationNamesOrNull(cacheState)
     val fromName = stationNames?.first ?: "–"
     var toName = stationNames?.second ?: "–"
@@ -125,6 +140,7 @@ private fun MaterialScope.header(cacheState: CacheState, clock: Clock): LayoutEl
                 )
                 .build(),
         )
+        .addContent(swapIcon(direction))
         .build()
 }
 
@@ -135,15 +151,32 @@ private fun stationNamesOrNull(cacheState: CacheState): Pair<String, String>? =
         is CacheState.NoData -> null
     }
 
-private fun MaterialScope.mainContent(cacheState: CacheState, clock: Clock): LayoutElement {
+// Vertical gap between the header and the first row, and between each
+// pair of rows — matches MainActivity's row rhythm (its TripRow uses
+// 4dp top+bottom padding, an 8dp gap edge-to-edge between rows).
+private val ROW_GAP = DimensionBuilders.dp(8f)
+
+private fun MaterialScope.mainContent(direction: Direction, cacheState: CacheState, clock: Clock): LayoutElement {
     val column = LayoutElementBuilders.Column.Builder().setWidth(DimensionBuilders.expand())
-    column.addContent(header(cacheState, clock))
+    column.addContent(header(direction, cacheState, clock))
+    column.addContent(verticalSpacer(ROW_GAP))
     when (cacheState) {
         is CacheState.Fresh -> column.addContent(tripsColumn(cacheState.data))
         is CacheState.Stale -> column.addContent(tripsColumn(cacheState.data))
         is CacheState.NoData -> column.addContent(noDataContent(cacheState.reason))
     }
-    return column.build()
+
+    // The content block is naturally shorter than the tile now (four
+    // compact rows, no more dominant "N min" figure eating vertical
+    // space) — centering it in the available height uses the leftover
+    // room instead of leaving it pinned to the top with empty space
+    // below, on both 454 and 384.
+    return LayoutElementBuilders.Box.Builder()
+        .setWidth(DimensionBuilders.expand())
+        .setHeight(DimensionBuilders.expand())
+        .setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
+        .addContent(column.build())
+        .build()
 }
 
 private fun MaterialScope.tripsColumn(data: CachedTripsData): LayoutElement {
@@ -158,7 +191,10 @@ private fun MaterialScope.tripsColumn(data: CachedTripsData): LayoutElement {
     // parent at all — "Column set to wrap but contents are unmeasurable" —
     // silently dropping the whole column rather than just the row.
     val column = LayoutElementBuilders.Column.Builder().setWidth(DimensionBuilders.expand())
-    shown.forEach { trip -> column.addContent(tripRow(trip)) }
+    shown.forEachIndexed { index, trip ->
+        if (index > 0) column.addContent(verticalSpacer(ROW_GAP))
+        column.addContent(tripRow(trip))
+    }
     return column.build()
 }
 
@@ -172,7 +208,12 @@ private fun MaterialScope.tripRow(trip: TripDto): LayoutElement {
 
     val dots = crowdDots(trip.crowdForecast)
     if (dots != null) {
-        rowBuilder.addContent(spacer(DimensionBuilders.dp(4f)))
+        // MainActivity uses the same nominal 4dp gap here and it reads
+        // fine there; on the tile's renderer, at this size, 4dp rendered
+        // as the dots touching the track chip with no visible gap at all.
+        // Doubled rather than chasing why the same value looks different
+        // across the two renderers.
+        rowBuilder.addContent(spacer(DimensionBuilders.dp(8f)))
         rowBuilder.addContent(dots)
     }
     return rowBuilder.build()
@@ -289,6 +330,9 @@ private fun MaterialScope.crowdDots(crowdForecast: String): LayoutElement? {
 
 private fun spacer(width: DimensionBuilders.ContainerDimension): LayoutElement =
     LayoutElementBuilders.Box.Builder().setWidth(width).build()
+
+private fun verticalSpacer(height: DimensionBuilders.ContainerDimension): LayoutElement =
+    LayoutElementBuilders.Box.Builder().setHeight(height).build()
 
 private fun MaterialScope.noDataContent(reason: NoDataReason): LayoutElement {
     val (message, detail) =
