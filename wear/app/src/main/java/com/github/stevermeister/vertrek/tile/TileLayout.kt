@@ -83,27 +83,15 @@ private fun MaterialScope.swapIcon(direction: Direction): LayoutElement {
         .build()
 }
 
-// Fixed, not expand(): protolayout's expand() has no minimum-width
-// concept (only setLayoutWeight(), no floor), so an expand()-width
-// origin sharing the row with a long destination could shrink all the
-// way to zero and disappear entirely — reproduced on the 384x384 AVD.
-// A small fixed budget guarantees the origin always shows a character
-// or two before its own ellipsis. Kept tight — every dp here is a dp
-// the destination doesn't get — since MainActivity gives the
-// destination the whole name at 454 and this should match that as
-// closely as the fixed-width approach allows.
-private val ORIGIN_HEADER_WIDTH = DimensionBuilders.dp(20f)
-
 /**
- * The origin is ellipsized, not the destination: you know where you're
- * leaving from, you care where you're going. The origin gets a small
- * fixed width (see ORIGIN_HEADER_WIDTH); the destination gets the rest
- * via expand(), with its own maxLines=1 + ellipsize as a fallback for
- * the rare screen where even that isn't enough room for both. The swap
- * icon rides inline at the end, not on its own line above.
+ * Both names come straight from the Worker's fromStationShort/
+ * toStationShort — the user picks values short enough to fit (see
+ * STATION_A_SHORT/STATION_B_SHORT in the README), so there's no
+ * width-budgeting logic here beyond a maxLines=1 + ellipsize safety net.
+ * The swap icon rides inline at the end, not on its own line above.
  */
 private fun MaterialScope.header(direction: Direction, cacheState: CacheState, clock: Clock): LayoutElement {
-    val stationNames = stationNamesOrNull(cacheState)
+    val stationNames = shortStationNamesOrNull(cacheState)
     val fromName = stationNames?.first ?: "–"
     var toName = stationNames?.second ?: "–"
     if (cacheState is CacheState.Stale) {
@@ -114,25 +102,11 @@ private fun MaterialScope.header(direction: Direction, cacheState: CacheState, c
         .setWidth(DimensionBuilders.expand())
         .addContent(
             LayoutElementBuilders.Box.Builder()
-                .setWidth(ORIGIN_HEADER_WIDTH)
-                .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
-                .addContent(
-                    text(
-                        fromName.layoutString,
-                        typography = Typography.LABEL_SMALL,
-                        maxLines = 1,
-                        overflow = LayoutElementBuilders.TEXT_OVERFLOW_ELLIPSIZE,
-                    ),
-                )
-                .build(),
-        )
-        .addContent(
-            LayoutElementBuilders.Box.Builder()
                 .setWidth(DimensionBuilders.expand())
                 .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
                 .addContent(
                     text(
-                        " → $toName".layoutString,
+                        "$fromName → $toName".layoutString,
                         typography = Typography.LABEL_SMALL,
                         maxLines = 1,
                         overflow = LayoutElementBuilders.TEXT_OVERFLOW_ELLIPSIZE,
@@ -144,10 +118,10 @@ private fun MaterialScope.header(direction: Direction, cacheState: CacheState, c
         .build()
 }
 
-private fun stationNamesOrNull(cacheState: CacheState): Pair<String, String>? =
+private fun shortStationNamesOrNull(cacheState: CacheState): Pair<String, String>? =
     when (cacheState) {
-        is CacheState.Fresh -> cacheState.data.fromStationName to cacheState.data.toStationName
-        is CacheState.Stale -> cacheState.data.fromStationName to cacheState.data.toStationName
+        is CacheState.Fresh -> cacheState.data.fromStationShort to cacheState.data.toStationShort
+        is CacheState.Stale -> cacheState.data.fromStationShort to cacheState.data.toStationShort
         is CacheState.NoData -> null
     }
 

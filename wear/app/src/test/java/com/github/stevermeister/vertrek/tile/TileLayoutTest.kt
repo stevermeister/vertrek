@@ -72,6 +72,8 @@ class TileLayoutTest {
             direction = "ab",
             fromStationName = "Almere Oostvaarders",
             toStationName = "Amsterdam Centraal",
+            fromStationShort = "Oostvaarders",
+            toStationShort = "Amsterdam",
             trips =
                 listOf(
                     TripDto(
@@ -111,6 +113,8 @@ class TileLayoutTest {
             direction = "ab",
             fromStationName = "Almere Oostvaarders",
             toStationName = "Amsterdam Centraal",
+            fromStationShort = "Oostvaarders",
+            toStationShort = "Amsterdam",
             trips =
                 listOf(
                     TripDto("2026-11-02T11:07:00Z", "2026-11-02T11:40:00Z", 0, "4b", false, "UNKNOWN"),
@@ -125,10 +129,10 @@ class TileLayoutTest {
         buildTileLayout(context, roundDevice, direction, cacheState, clock)
 
     @Test
-    fun `header shows full station names, not codes`() {
+    fun `header shows the short station names, not the full names or codes`() {
         val layout = layoutFor(Direction.AB, CacheState.Fresh(sampleData()))
-        LayoutElementAssertionsProvider(layout).onElement(containsText("Almere Oostvaarders")).assertExists()
-        LayoutElementAssertionsProvider(layout).onElement(containsText("Amsterdam Centraal")).assertExists()
+        LayoutElementAssertionsProvider(layout).onElement(containsText("Oostvaarders")).assertExists()
+        LayoutElementAssertionsProvider(layout).onElement(containsText("Amsterdam")).assertExists()
         LayoutElementAssertionsProvider(layout).onElement(containsText("→")).assertExists()
     }
 

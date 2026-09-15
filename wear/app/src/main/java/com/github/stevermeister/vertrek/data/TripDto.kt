@@ -20,12 +20,20 @@ data class TripDto(
     val crowdForecast: String = "UNKNOWN", // "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN"
 )
 
-/** Mirrors the Worker's GET /next 200 response body. */
+/**
+ * Mirrors the Worker's GET /next 200 response body.
+ *
+ * fromStationShort/toStationShort default to "" so decoding a response
+ * from a Worker predating these fields never throws; TripsViewModel falls
+ * back to the full name when a short one is blank.
+ */
 @Serializable
 data class NextResponseDto(
     val dir: String,
     val fromStationName: String,
     val toStationName: String,
+    val fromStationShort: String = "",
+    val toStationShort: String = "",
     val trips: List<TripDto>,
 )
 

@@ -59,6 +59,10 @@ class RefreshWorker(
                                 direction = direction.paramValue,
                                 fromStationName = outcome.response.fromStationName,
                                 toStationName = outcome.response.toStationName,
+                                fromStationShort =
+                                    outcome.response.fromStationShort.ifBlank { outcome.response.fromStationName },
+                                toStationShort =
+                                    outcome.response.toStationShort.ifBlank { outcome.response.toStationName },
                                 trips = outcome.response.trips,
                                 fetchedAtEpochMillis = System.currentTimeMillis(),
                             ),

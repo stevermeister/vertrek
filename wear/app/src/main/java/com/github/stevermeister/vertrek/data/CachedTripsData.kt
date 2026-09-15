@@ -27,6 +27,8 @@ data class CachedTripsData(
     val direction: String,
     val fromStationName: String = "",
     val toStationName: String = "",
+    val fromStationShort: String = "",
+    val toStationShort: String = "",
     val trips: List<TripDto>,
     val fetchedAtEpochMillis: Long,
 )
