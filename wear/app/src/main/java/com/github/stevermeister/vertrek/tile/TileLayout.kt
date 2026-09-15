@@ -72,11 +72,20 @@ private fun MaterialScope.swapIcon(direction: Direction): LayoutElement {
         .build()
 }
 
+// Fixed, not expand(): protolayout's expand() has no minimum-width
+// concept (only setLayoutWeight(), no floor), so an expand()-width
+// origin sharing the row with a long destination could shrink all the
+// way to zero and disappear entirely — reproduced on the 384x384 AVD.
+// A small fixed budget guarantees the origin always shows a character
+// or two before its own ellipsis.
+private val ORIGIN_HEADER_WIDTH = DimensionBuilders.dp(36f)
+
 /**
- * Full station names on one line, ellipsized as a whole (truncating from
- * the end lands on the trailing name, which is the desired behaviour)
- * rather than two separately-sized texts — the two-text/weight()-style
- * split used on MainActivity hit its own, unrelated rendering issue here.
+ * The origin is ellipsized, not the destination: you know where you're
+ * leaving from, you care where you're going. The origin gets a small
+ * fixed width (see ORIGIN_HEADER_WIDTH); the destination gets the rest
+ * via expand(), with its own maxLines=1 + ellipsize as a fallback for
+ * the rare screen where even that isn't enough room for both.
  */
 private fun MaterialScope.header(cacheState: CacheState, clock: Clock): LayoutElement {
     val stationNames = stationNamesOrNull(cacheState)
@@ -86,16 +95,35 @@ private fun MaterialScope.header(cacheState: CacheState, clock: Clock): LayoutEl
         toName = "$toName · ${cacheState.data.ageMinutes(clock)}m old"
     }
 
-    return LayoutElementBuilders.Box.Builder()
+    return LayoutElementBuilders.Row.Builder()
         .setWidth(DimensionBuilders.expand())
-        .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
         .addContent(
-            text(
-                "$fromName → $toName".layoutString,
-                typography = Typography.LABEL_SMALL,
-                maxLines = 1,
-                overflow = LayoutElementBuilders.TEXT_OVERFLOW_ELLIPSIZE,
-            ),
+            LayoutElementBuilders.Box.Builder()
+                .setWidth(ORIGIN_HEADER_WIDTH)
+                .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
+                .addContent(
+                    text(
+                        fromName.layoutString,
+                        typography = Typography.LABEL_SMALL,
+                        maxLines = 1,
+                        overflow = LayoutElementBuilders.TEXT_OVERFLOW_ELLIPSIZE,
+                    ),
+                )
+                .build(),
+        )
+        .addContent(
+            LayoutElementBuilders.Box.Builder()
+                .setWidth(DimensionBuilders.expand())
+                .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
+                .addContent(
+                    text(
+                        " → $toName".layoutString,
+                        typography = Typography.LABEL_SMALL,
+                        maxLines = 1,
+                        overflow = LayoutElementBuilders.TEXT_OVERFLOW_ELLIPSIZE,
+                    ),
+                )
+                .build(),
         )
         .build()
 }
@@ -223,6 +251,10 @@ private fun MaterialScope.trackChip(track: String?): LayoutElement =
 /**
  * Three small dots, filled 1/2/3 for LOW/MEDIUM/HIGH. UNKNOWN renders
  * nothing at all — no element, not even an empty placeholder.
+ *
+ * Filled = solid bright dot; unfilled = hollow outline ring — a real
+ * fill-vs-outline distinction, not two shades of grey (which read as
+ * identical at a glance at this size).
  */
 private fun MaterialScope.crowdDots(crowdForecast: String): LayoutElement? {
     val filledCount =
@@ -236,18 +268,19 @@ private fun MaterialScope.crowdDots(crowdForecast: String): LayoutElement? {
 
     val row = LayoutElementBuilders.Row.Builder()
     for (i in 0 until 3) {
-        if (i > 0) row.addContent(spacer(DimensionBuilders.dp(2f)))
+        if (i > 0) row.addContent(spacer(DimensionBuilders.dp(3f)))
         val filled = i < filledCount
+        val dotModifier =
+            if (filled) {
+                LayoutModifier.background(colorScheme.onSurface).clip(2.5f)
+            } else {
+                LayoutModifier.border(width = 1f, color = colorScheme.outline).clip(2.5f)
+            }
         row.addContent(
             LayoutElementBuilders.Box.Builder()
-                .setWidth(DimensionBuilders.dp(4f))
-                .setHeight(DimensionBuilders.dp(4f))
-                .setModifiers(
-                    LayoutModifier
-                        .background(if (filled) colorScheme.primary else colorScheme.outlineVariant)
-                        .clip(2f)
-                        .toProtoLayoutModifiers(),
-                )
+                .setWidth(DimensionBuilders.dp(5f))
+                .setHeight(DimensionBuilders.dp(5f))
+                .setModifiers(dotModifier.toProtoLayoutModifiers())
                 .build(),
         )
     }

@@ -9,12 +9,16 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -26,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,6 +61,11 @@ private const val MAX_ROWS_SHOWN = 4
 // How far (in px, converted from dp at render time) a downward pull past
 // the top of the list must travel before releasing triggers a refresh.
 private val PULL_TRIGGER_DP = 56.dp
+
+// Smallest width the header ever gives the origin name, even when the
+// destination needs nearly the whole row — enough for a couple of
+// characters plus an ellipsis, so it never disappears outright.
+private val MIN_ORIGIN_WIDTH = 28.dp
 private const val PULL_RUBBER_BAND = 0.5f // drag feels heavier than 1:1, like a real pull-to-refresh
 
 /** Tap target for the tile — shows the full list of upcoming trips. */
@@ -181,29 +191,71 @@ private fun ContentScreen(state: TripsUiState.Content, onSwap: () -> Unit, onRef
 
 @Composable
 private fun DirectionHeader(fromStationName: String?, toStationName: String?) {
-    // One Text, not two Texts with a RowScope.weight() split between them:
-    // that rendered the second name as nothing at all — Wear Compose
-    // Material3's Text silently collapsed to empty width in that
-    // combination, on both a ScalingLazyColumn item and a plain Column.
-    // A single string with maxLines=1 + ellipsis truncates from the end,
-    // which is the second name anyway, giving the same "second name
-    // shrinks first" behaviour through a path that actually renders.
-    Text(
-        "${fromStationName ?: "–"} → ${toStationName ?: "–"}",
-        style = MaterialTheme.typography.labelSmall,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-    )
+    val fromName = fromStationName ?: "–"
+    val toName = toStationName ?: "–"
+    val toText = " → $toName"
+    val style = MaterialTheme.typography.labelSmall
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+
+    // The origin is ellipsized, not the destination — you know where
+    // you're leaving from, you care where you're going. A fixed
+    // percentage cap on the origin isn't enough to guarantee that: for
+    // a long destination it just silently clips the destination instead
+    // (no ellipsis, no indication — the text is simply cut off by the
+    // row's own bounds). So the destination's actual rendered width is
+    // measured first, and the origin gets only whatever's left. Not
+    // RowScope.weight(): weight() on this exact pair of Texts silently
+    // rendered the flexible one as nothing at all under Wear Compose
+    // Material3's Text.
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        val toWidthPx = remember(toText, style) { textMeasurer.measure(toText, style).size.width }
+        val toWidthDp = with(density) { toWidthPx.toDp() }
+        // Never let the origin vanish to zero width even when the
+        // destination alone claims nearly the whole row (a bare arrow
+        // with nothing before it reads as broken, not "prioritised") —
+        // a small floor still shows a character or two before the
+        // ellipsis, at the cost of the destination occasionally losing
+        // its own last character or two on the narrowest screens.
+        val fromNameMaxWidth = (maxWidth - toWidthDp).coerceAtLeast(MIN_ORIGIN_WIDTH)
+        val toNameMaxWidth = maxWidth - fromNameMaxWidth
+        Row {
+            Text(
+                fromName,
+                style = style,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = fromNameMaxWidth),
+            )
+            Text(
+                toText,
+                style = style,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                // Only actually binds on the rare screen where even the
+                // origin's floored minimum doesn't leave enough room for
+                // the whole destination — otherwise this is >= toText's
+                // own natural width and has no effect.
+                modifier = Modifier.widthIn(max = toNameMaxWidth),
+            )
+        }
+    }
 }
 
 @Composable
 private fun TripRow(trip: TripDto) {
+    // TimesBlock at its natural width, then a weighted Spacer (not a
+    // Text) to push the track chip and crowd dots to the end — putting
+    // weight() directly on TimesBlock made its arrival time vanish on
+    // the smaller 384x384 screen specifically, the same Wear Compose
+    // Material3 Text + weight() interaction as the header's origin/
+    // destination split.
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TimesBlock(trip, modifier = Modifier.weight(1f))
+        TimesBlock(trip)
+        Spacer(modifier = Modifier.weight(1f))
         TrackChip(trip.track)
         CrowdDots(trip.crowdForecast, modifier = Modifier.padding(start = 4.dp))
     }
@@ -262,6 +314,10 @@ private fun TrackChip(track: String?) {
 /**
  * Three small dots, filled 1/2/3 for LOW/MEDIUM/HIGH. UNKNOWN renders
  * nothing at all — no composable, not even an empty placeholder.
+ *
+ * Filled = solid bright dot; unfilled = hollow outline ring — a real
+ * fill-vs-outline distinction, not two shades of grey (which read as
+ * identical at a glance at this size).
  */
 @Composable
 private fun CrowdDots(crowdForecast: String, modifier: Modifier = Modifier) {
@@ -274,16 +330,19 @@ private fun CrowdDots(crowdForecast: String, modifier: Modifier = Modifier) {
         }
     if (filledCount == 0) return
 
-    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
         repeat(3) { index ->
             val filled = index < filledCount
             Box(
                 modifier =
                     Modifier
-                        .size(4.dp)
-                        .background(
-                            color = if (filled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                            shape = RoundedCornerShape(2.dp),
+                        .size(5.dp)
+                        .then(
+                            if (filled) {
+                                Modifier.background(color = MaterialTheme.colorScheme.onSurface, shape = CircleShape)
+                            } else {
+                                Modifier.border(width = 1.dp, color = MaterialTheme.colorScheme.outline, shape = CircleShape)
+                            },
                         ),
             )
         }
