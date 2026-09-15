@@ -3,6 +3,12 @@ import type { NsLeg, NsTrip, NsTripsResponse } from "./ns-types";
 export interface Env {
   STATION_A: string;
   STATION_B: string;
+  // Optional short display names for the tile header (e.g. "Amsterdam"
+  // instead of "Amsterdam Centraal"). Passed through verbatim, no
+  // truncation logic — see index.ts's resolveShortStationNames(), which
+  // falls back to the full station name when unset.
+  STATION_A_SHORT?: string;
+  STATION_B_SHORT?: string;
   NS_API_KEY: string;
   // Shared secret the watch app sends as X-Vertrek-Key. Optional in the
   // type because an operator can forget to set it — see src/auth.ts,

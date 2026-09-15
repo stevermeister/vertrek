@@ -86,6 +86,14 @@ If you'd rather not keep a second config file at all, skip
 about your two station codes needs to be secret, this is purely to keep
 `git pull` clean if you fork this repo and want to track upstream changes.
 
+Optionally, also set `STATION_A_SHORT` / `STATION_B_SHORT` — short display
+names used only by the watch tile's header (the phone-sized main screen
+always shows the full names). Mine are `"Oostvaarders"` and `"Amsterdam"`.
+The Worker passes whatever you set through verbatim, with no truncation
+logic of its own — pick something that fits your watch's screen. If
+either is left unset, that side just falls back to the full station name,
+so this works out of the box on a fresh clone with zero configuration.
+
 Set your API key as a secret (never in a file that gets committed):
 
 ```bash
@@ -313,6 +321,8 @@ for 30 seconds per `dir`:
   "dir": "ab",
   "fromStationName": "Almere Oostvaarders",
   "toStationName": "Amsterdam Centraal",
+  "fromStationShort": "Oostvaarders",
+  "toStationShort": "Amsterdam",
   "trips": [
     {
       "departureTime": "2026-11-02T12:08:00+0100",
@@ -328,9 +338,13 @@ for 30 seconds per `dir`:
 
 `fromStationName`/`toStationName` are the full display names, resolved
 server-side from the trip response — the watch app renders these
-directly and never sees `STATION_A`/`STATION_B`. `crowdForecast` is
-`LOW` | `MEDIUM` | `HIGH` | `UNKNOWN`: the NS API reports it per leg,
-so multi-leg trips are reduced to their busiest leg.
+directly and never sees `STATION_A`/`STATION_B`. `fromStationShort`/
+`toStationShort` mirror `STATION_A_SHORT`/`STATION_B_SHORT` verbatim (see
+Setup step 2), falling back to the full name when the corresponding var
+is unset; only the tile header uses these, the main screen always uses
+the full names. `crowdForecast` is `LOW` | `MEDIUM` | `HIGH` | `UNKNOWN`:
+the NS API reports it per leg, so multi-leg trips are reduced to their
+busiest leg.
 
 All error responses are machine-readable JSON:
 

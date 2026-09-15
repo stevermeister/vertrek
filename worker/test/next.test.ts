@@ -113,6 +113,8 @@ describe("GET /next", () => {
       dir: string;
       fromStationName: string;
       toStationName: string;
+      fromStationShort: string;
+      toStationShort: string;
       trips: unknown[];
     }>();
     expect(json.dir).toBe("ab");
@@ -120,6 +122,9 @@ describe("GET /next", () => {
     // from the NS response, not from any Worker-side station config.
     expect(json.fromStationName).toBe("Amsterdam Centraal");
     expect(json.toStationName).toBe("Utrecht Centraal");
+    // Test env has STATION_A_SHORT/STATION_B_SHORT set — see vitest.config.ts.
+    expect(json.fromStationShort).toBe(env.STATION_A_SHORT);
+    expect(json.toStationShort).toBe(env.STATION_B_SHORT);
     // The fixture has 7 trips — this proves the cap still trims, not just that 4 fit.
     expect(json.trips).toHaveLength(4);
 
@@ -224,6 +229,35 @@ describe("GET /next", () => {
 
     expect(json.fromStationName).toBe(env.STATION_A);
     expect(json.toStationName).toBe(env.STATION_B);
+  });
+
+  it("swaps the short station names for dir=ba, same as the full names", async () => {
+    mockNsTrips(env.STATION_B, env.STATION_A, { source: "TEST", trips: [] });
+
+    const response = await authedFetch("https://worker.example/next?dir=ba");
+    const json = await response.json<{ fromStationShort: string; toStationShort: string }>();
+
+    expect(json.fromStationShort).toBe(env.STATION_B_SHORT);
+    expect(json.toStationShort).toBe(env.STATION_A_SHORT);
+  });
+
+  it("falls back to the full station name when a _SHORT var is unset", async () => {
+    mockNsTrips(env.STATION_A, env.STATION_B, fixture);
+
+    const unconfiguredEnv = { ...env, STATION_A_SHORT: undefined, STATION_B_SHORT: undefined };
+    const request = new Request("https://worker.example/next?dir=ab", {
+      headers: { [VERTREK_KEY_HEADER]: env.VERTREK_KEY! },
+    });
+    const response = await worker.fetch(request, unconfiguredEnv);
+    const json = await response.json<{
+      fromStationName: string;
+      toStationName: string;
+      fromStationShort: string;
+      toStationShort: string;
+    }>();
+
+    expect(json.fromStationShort).toBe(json.fromStationName);
+    expect(json.toStationShort).toBe(json.toStationName);
   });
 
   it("asks NS for previousAdvices=0 and does NOT send nextAdvices (confirmed decommissioned live)", async () => {

@@ -47,10 +47,12 @@ export default {
 
     let compactTrips;
     let stationNames;
+    let shortStationNames;
     try {
       const nsResponse = await fetchTrips(env, from, to);
       compactTrips = toCompactTrips(nsResponse, maxTrips);
       stationNames = extractStationNames(nsResponse, from, to);
+      shortStationNames = resolveShortStationNames(env, dir, stationNames);
     } catch (err) {
       if (err instanceof NsApiError) {
         return jsonError(502, "NS_API_UNAVAILABLE", err.message, {
@@ -65,6 +67,8 @@ export default {
         dir,
         fromStationName: stationNames.fromStationName,
         toStationName: stationNames.toStationName,
+        fromStationShort: shortStationNames.fromStationShort,
+        toStationShort: shortStationNames.toStationShort,
         trips: compactTrips,
       }),
       {
@@ -90,6 +94,27 @@ function resolveStations(env: Env, dir: Direction): { from: string; to: string }
   return dir === "ab"
     ? { from: env.STATION_A, to: env.STATION_B }
     : { from: env.STATION_B, to: env.STATION_A };
+}
+
+// Short display names for the tile header, verbatim from wrangler vars —
+// no truncation/ellipsis logic. Swapped per direction the same way
+// resolveStations() swaps the station codes. Falls back to the full
+// station name (not a hardcoded default) when the corresponding _SHORT
+// var is unset, so a fresh clone works with zero configuration.
+function resolveShortStationNames(
+  env: Env,
+  dir: Direction,
+  stationNames: { fromStationName: string; toStationName: string },
+): { fromStationShort: string; toStationShort: string } {
+  const [fromShortVar, toShortVar] =
+    dir === "ab"
+      ? [env.STATION_A_SHORT, env.STATION_B_SHORT]
+      : [env.STATION_B_SHORT, env.STATION_A_SHORT];
+
+  return {
+    fromStationShort: fromShortVar || stationNames.fromStationName,
+    toStationShort: toShortVar || stationNames.toStationName,
+  };
 }
 
 function jsonError(

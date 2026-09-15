@@ -17,6 +17,13 @@
     // your real stations there; see README Setup step 2.
     "STATION_A": "ASD",
     "STATION_B": "UT",
+    // Optional short display names for the tile header only (MainActivity
+    // always shows the full name from the NS response). Passed through
+    // verbatim, no truncation logic — pick something that fits your
+    // watch's tile. If unset, the tile falls back to the full station
+    // name for that side, so this works unconfigured out of the box.
+    "STATION_A_SHORT": "Amsterdam",
+    "STATION_B_SHORT": "Utrecht",
     // Trips returned per request. NS itself caps this endpoint at 5 per
     // call (verified live against a real key — previousAdvices/nextAdvices
     // are decommissioned and do not raise it); getting more than 5 would
