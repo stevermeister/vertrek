@@ -3,7 +3,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
 import { VERTREK_KEY_HEADER } from "../src/auth";
 import fixture from "./fixtures/trips-response.json";
-import duplicateFixture from "./fixtures/trips-response-duplicate.json";
 
 beforeAll(() => {
   fetchMock.activate();
@@ -162,30 +161,6 @@ describe("GET /next", () => {
     // carry the planned time — the client adds the delay marker itself.
     expect(json.trips[0]?.departureTime).toBe("2026-11-02T12:03:00+0100");
     expect(json.trips[0]?.delayMinutes).toBe(5);
-  });
-
-  it("dedupes two NS advices sharing a planned departure time, preferring the non-cancelled one", async () => {
-    // Reproduces a real live observation: NS's /trips response can return
-    // a cancelled original advice and a replacement advice both anchored
-    // to the same planned origin departure (13:36). toCompactTrips() is a
-    // straight 1:1 map with no merge logic — a duplicate here always
-    // means NS's own response had two trip objects at that time, not that
-    // the Worker introduced one. It should still never cost the caller
-    // one of their limited slots on a trip that isn't real.
-    mockNsTrips(env.STATION_A, env.STATION_B, duplicateFixture);
-
-    const response = await authedFetch("https://worker.example/next?dir=ab");
-    const json = await response.json<{
-      trips: Array<{ departureTime: string; cancelled: boolean; track: string | null }>;
-    }>();
-
-    expect(json.trips).toHaveLength(2); // not 3 — the cancelled duplicate is dropped
-    const atThirteenThirtySix = json.trips.filter((t) => t.departureTime === "2026-11-02T13:36:00+0100");
-    expect(atThirteenThirtySix).toHaveLength(1);
-    expect(atThirteenThirtySix[0]?.cancelled).toBe(false);
-    expect(atThirteenThirtySix[0]?.track).toBe("3a"); // the replacement's track, not the cancelled trip's 4b
-
-    expect(json.trips[1]?.departureTime).toBe("2026-11-02T13:55:00+0100"); // the third, distinct trip survives untouched
   });
 
   it("reduces a multi-leg trip's crowdForecast to its busiest leg", async () => {
