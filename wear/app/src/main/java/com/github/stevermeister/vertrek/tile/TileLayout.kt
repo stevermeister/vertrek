@@ -29,14 +29,10 @@ import com.github.stevermeister.vertrek.data.Direction
 import com.github.stevermeister.vertrek.data.NoDataReason
 import com.github.stevermeister.vertrek.data.TripDto
 import com.github.stevermeister.vertrek.data.ageMinutes
-import com.github.stevermeister.vertrek.data.formattedArrivalTime
 import com.github.stevermeister.vertrek.data.formattedDepartureTime
+import com.github.stevermeister.vertrek.data.minutesUntilDeparture
 import com.github.stevermeister.vertrek.data.opposite
 import java.time.Clock
-
-// Matches the Worker's MAX_TRIPS (worker/wrangler.jsonc) — four rows, a
-// row-layout choice, not NS's own 5-per-call cap.
-private const val MAX_ROWS = 4
 
 fun buildTileLayout(
     context: Context,
@@ -135,16 +131,11 @@ private fun MaterialScope.mainContent(direction: Direction, cacheState: CacheSta
     column.addContent(header(direction, cacheState, clock))
     column.addContent(verticalSpacer(ROW_GAP))
     when (cacheState) {
-        is CacheState.Fresh -> column.addContent(tripsColumn(cacheState.data))
-        is CacheState.Stale -> column.addContent(tripsColumn(cacheState.data))
+        is CacheState.Fresh -> column.addContent(tileBody(cacheState.data, clock))
+        is CacheState.Stale -> column.addContent(tileBody(cacheState.data, clock))
         is CacheState.NoData -> column.addContent(noDataContent(cacheState.reason))
     }
 
-    // The content block is naturally shorter than the tile now (four
-    // compact rows, no more dominant "N min" figure eating vertical
-    // space) — centering it in the available height uses the leftover
-    // room instead of leaving it pinned to the top with empty space
-    // below, on both 454 and 384.
     return LayoutElementBuilders.Box.Builder()
         .setWidth(DimensionBuilders.expand())
         .setHeight(DimensionBuilders.expand())
@@ -153,54 +144,72 @@ private fun MaterialScope.mainContent(direction: Direction, cacheState: CacheSta
         .build()
 }
 
-private fun MaterialScope.tripsColumn(data: CachedTripsData): LayoutElement {
-    val shown = data.trips.take(MAX_ROWS)
-    if (shown.isEmpty()) {
+/**
+ * One primary figure (minutes to the next direct train) plus exactly two
+ * rows — the user's actual commute, not a generic trip list. Selection
+ * (direct-preferred, past-departures-dropped, transfers-fallback) lives
+ * in selectTileTrips(); this function only renders whatever it decides.
+ */
+private fun MaterialScope.tileBody(data: CachedTripsData, clock: Clock): LayoutElement {
+    val selection = selectTileTrips(data.trips, clock)
+    if (selection.rows.isEmpty()) {
         return text("No upcoming trips".layoutString, typography = Typography.BODY_SMALL, maxLines = 1)
     }
+
+    val column = LayoutElementBuilders.Column.Builder().setWidth(DimensionBuilders.expand())
+    column.addContent(primaryFigure(selection.rows.first(), clock))
+    column.addContent(verticalSpacer(ROW_GAP))
 
     // Explicit width required: each row is a Row with setWidth(expand()),
     // and protolayout's real renderer (unlike Robolectric's test renderer)
     // refuses to inflate an expand()-width child inside a wrap-width
     // parent at all — "Column set to wrap but contents are unmeasurable" —
     // silently dropping the whole column rather than just the row.
-    val column = LayoutElementBuilders.Column.Builder().setWidth(DimensionBuilders.expand())
-    shown.forEachIndexed { index, trip ->
-        if (index > 0) column.addContent(verticalSpacer(ROW_GAP))
-        column.addContent(tripRow(trip))
+    val rows = LayoutElementBuilders.Column.Builder().setWidth(DimensionBuilders.expand())
+    selection.rows.forEachIndexed { index, trip ->
+        if (index > 0) rows.addContent(verticalSpacer(ROW_GAP))
+        rows.addContent(tripRow(trip, selection.isFallback))
     }
+    column.addContent(rows.build())
     return column.build()
 }
 
-private fun MaterialScope.tripRow(trip: TripDto): LayoutElement {
+/**
+ * The single large glanceable figure: minutes until the next direct
+ * train, computed against the device clock — see minutesUntilDeparture()
+ * for why this is never cache-age-based. Null (already departed by the
+ * time this renders, or unparseable) shows a dash rather than a wrong
+ * number — the whole point of the fix this replaces.
+ */
+private fun MaterialScope.primaryFigure(trip: TripDto, clock: Clock): LayoutElement {
+    val minutes = trip.minutesUntilDeparture(clock)
+    val label = if (minutes != null) "$minutes min" else "–"
+    return text(label.layoutString, typography = Typography.NUMERAL_MEDIUM, maxLines = 1)
+}
+
+private fun MaterialScope.tripRow(trip: TripDto, isFallback: Boolean): LayoutElement {
     val rowBuilder =
         LayoutElementBuilders.Row.Builder()
             .setWidth(DimensionBuilders.expand())
             .addContent(timesBlock(trip))
             .addContent(spacer(DimensionBuilders.expand()))
-            .addContent(trackChip(trip.track))
 
-    val dots = crowdDots(trip.crowdForecast)
-    if (dots != null) {
-        // MainActivity uses the same nominal 4dp gap here and it reads
-        // fine there; on the tile's renderer, at this size, 4dp rendered
-        // as the dots touching the track chip with no visible gap at all.
-        // Doubled rather than chasing why the same value looks different
-        // across the two renderers.
-        rowBuilder.addContent(spacer(DimensionBuilders.dp(8f)))
-        rowBuilder.addContent(dots)
+    if (isFallback) {
+        rowBuilder.addContent(transferBadge(trip.transfers))
+        rowBuilder.addContent(spacer(DimensionBuilders.dp(6f)))
     }
+    rowBuilder.addContent(trackChip(trip.track))
     return rowBuilder.build()
 }
 
 /**
- * Departure time is primary — larger, full weight — with the delay
- * marker riding alongside it in the error colour. Arrival time is
- * secondary: smaller and dimmer, after a separator dot. Both come from
- * the Worker's planned departureTime (not the already-delay-adjusted
- * actual time — see the comment on toCompactTrip() in worker/src/ns.ts),
- * so "+N" here is additive on top of the displayed time, not a double
- * count. Struck through when cancelled.
+ * Planned time plus the "+N" delay marker in the error colour — both
+ * from the Worker's planned departureTime (not the already-delay-
+ * adjusted actual time — see the comment on toCompactTrip() in
+ * worker/src/ns.ts), so "+N" here is additive, not a double count.
+ * Struck through when cancelled. No arrival time, no crowd forecast —
+ * this row is the commute-specific glance view; MainActivity keeps both,
+ * unfiltered, as the detail view.
  */
 private fun MaterialScope.timesBlock(trip: TripDto): LayoutElement {
     val row = LayoutElementBuilders.Row.Builder()
@@ -217,20 +226,18 @@ private fun MaterialScope.timesBlock(trip: TripDto): LayoutElement {
             ),
         )
     }
-    row.addContent(
-        text(" · ".layoutString, typography = Typography.BODY_SMALL, color = colorScheme.onSurfaceVariant, maxLines = 1),
-    )
-    row.addContent(
-        text(
-            trip.formattedArrivalTime().layoutString,
-            typography = Typography.BODY_SMALL,
-            color = colorScheme.onSurfaceVariant,
-            maxLines = 1,
-        ),
-    )
     val content = row.build()
     return if (trip.cancelled) strikethroughOverlay(content) else content
 }
+
+/** Shown only on the transfers>0 fallback rows, so a transfer is never silently indistinguishable from a direct trip. */
+private fun MaterialScope.transferBadge(transfers: Int): LayoutElement =
+    text(
+        (if (transfers == 1) "1 transfer" else "$transfers transfers").layoutString,
+        typography = Typography.LABEL_SMALL,
+        color = colorScheme.onSurfaceVariant,
+        maxLines = 1,
+    )
 
 /**
  * protolayout's Text has no strikethrough property (only underline), so
@@ -262,45 +269,6 @@ private fun MaterialScope.trackChip(track: String?): LayoutElement =
                 .clip(3f)
                 .padding(horizontal = 4f, vertical = 1f),
     )
-
-/**
- * Three small dots, filled 1/2/3 for LOW/MEDIUM/HIGH. UNKNOWN renders
- * nothing at all — no element, not even an empty placeholder.
- *
- * Filled = solid bright dot; unfilled = hollow outline ring — a real
- * fill-vs-outline distinction, not two shades of grey (which read as
- * identical at a glance at this size).
- */
-private fun MaterialScope.crowdDots(crowdForecast: String): LayoutElement? {
-    val filledCount =
-        when (crowdForecast) {
-            "LOW" -> 1
-            "MEDIUM" -> 2
-            "HIGH" -> 3
-            else -> 0
-        }
-    if (filledCount == 0) return null
-
-    val row = LayoutElementBuilders.Row.Builder()
-    for (i in 0 until 3) {
-        if (i > 0) row.addContent(spacer(DimensionBuilders.dp(3f)))
-        val filled = i < filledCount
-        val dotModifier =
-            if (filled) {
-                LayoutModifier.background(colorScheme.onSurface).clip(2.5f)
-            } else {
-                LayoutModifier.border(width = 1f, color = colorScheme.outline).clip(2.5f)
-            }
-        row.addContent(
-            LayoutElementBuilders.Box.Builder()
-                .setWidth(DimensionBuilders.dp(5f))
-                .setHeight(DimensionBuilders.dp(5f))
-                .setModifiers(dotModifier.toProtoLayoutModifiers())
-                .build(),
-        )
-    }
-    return row.build()
-}
 
 // Root cause of a real, verified "Box set to wrap but contents are
 // unmeasurable" warning on-device: an empty Box with one dimension left

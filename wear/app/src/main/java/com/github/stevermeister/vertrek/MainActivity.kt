@@ -54,10 +54,6 @@ import com.github.stevermeister.vertrek.ui.TripsViewModel
 import com.github.stevermeister.vertrek.work.RefreshWorker
 import kotlin.math.min
 
-// Matches the Worker's MAX_TRIPS (worker/wrangler.jsonc) — four rows, a
-// row-layout choice, not NS's own 5-per-call cap.
-private const val MAX_ROWS_SHOWN = 4
-
 // How far (in px, converted from dp at render time) a downward pull past
 // the top of the list must travel before releasing triggers a refresh.
 private val PULL_TRIGGER_DP = 56.dp
@@ -164,11 +160,14 @@ private fun ContentScreen(state: TripsUiState.Content, onSwap: () -> Unit, onRef
         ) {
             DirectionHeader(fromStationName = state.fromStationName, toStationName = state.toStationName)
 
+            // Everything the Worker returned, unfiltered by transfers or
+            // count — this is the detail view. The tile is the one that
+            // narrows to the commute-specific 2-row glance.
             when (val body = state.body) {
-                is TripsBody.Fresh -> body.trips.take(MAX_ROWS_SHOWN).forEach { trip -> TripRow(trip) }
+                is TripsBody.Fresh -> body.trips.forEach { trip -> TripRow(trip) }
                 is TripsBody.Stale -> {
                     Text("Data is ${body.ageMinutes} min old", style = MaterialTheme.typography.bodySmall)
-                    body.trips.take(MAX_ROWS_SHOWN).forEach { trip -> TripRow(trip) }
+                    body.trips.forEach { trip -> TripRow(trip) }
                 }
                 is TripsBody.NoData -> NoDataMessage(body.reason)
                 TripsBody.Empty -> Text("No upcoming trips")

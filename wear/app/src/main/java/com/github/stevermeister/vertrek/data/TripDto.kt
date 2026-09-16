@@ -18,6 +18,11 @@ data class TripDto(
     val track: String? = null,
     val cancelled: Boolean,
     val crowdForecast: String = "UNKNOWN", // "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN"
+    // 0 = direct, no transfers. Defaults to 0 so decoding an old cached
+    // payload (from before this field existed) never throws — a stale
+    // cached trip predating this field was, in practice, always direct
+    // (transfers weren't tracked, not "unknown and possibly indirect").
+    val transfers: Int = 0,
 )
 
 /**
