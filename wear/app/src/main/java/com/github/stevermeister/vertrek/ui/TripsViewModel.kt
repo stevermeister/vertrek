@@ -66,7 +66,7 @@ class TripsViewModel(
     private val isRefreshing = MutableStateFlow(false)
 
     val uiState: StateFlow<TripsUiState> =
-        repository.observeDirectionOverride()
+        repository.observeDirectionOverride(clock)
             .map { override -> resolveDirection(override, clock) }
             .distinctUntilChanged()
             .flatMapLatest { direction ->
@@ -105,8 +105,8 @@ class TripsViewModel(
     /** Writes the same DataStore override the tile reads, then nudges the tile to redraw. */
     fun swapDirection() {
         viewModelScope.launch {
-            val current = resolveDirection(repository.getDirectionOverride(), clock)
-            repository.setDirectionOverride(current.opposite())
+            val current = resolveDirection(repository.getDirectionOverride(clock), clock)
+            repository.setDirectionOverride(current.opposite(), clock)
             onDirectionChanged()
         }
     }

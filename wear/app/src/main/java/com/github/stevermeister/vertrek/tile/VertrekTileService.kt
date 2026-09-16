@@ -43,7 +43,7 @@ class VertrekTileService : TileService() {
         val clock = Clock.systemDefaultZone()
 
         // Synchronous, off the local DataStore cache only — no network here.
-        val currentOverride = runBlocking { repository.getDirectionOverride() }
+        val currentOverride = runBlocking { repository.getDirectionOverride(clock) }
         val lastClickableId = requestParams.currentState.lastClickableId
         val effectiveDirection = resolveEffectiveDirection(lastClickableId, currentOverride, clock)
 
@@ -53,7 +53,7 @@ class VertrekTileService : TileService() {
             // The id names an absolute direction, so replaying a stale id
             // on a later, tap-less request just re-persists the same
             // value — it can never flip the direction on its own.
-            ioScope.launch { repository.setDirectionOverride(desiredDirection) }
+            ioScope.launch { repository.setDirectionOverride(desiredDirection, clock) }
         }
 
         val cached = runBlocking { repository.getCached(effectiveDirection) }

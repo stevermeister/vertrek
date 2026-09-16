@@ -4,8 +4,11 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import java.time.Clock
+import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -17,6 +20,7 @@ val Context.tripsDataStore: DataStore<Preferences> by preferencesDataStore(name 
 
 private object PreferenceKeys {
     val DIRECTION_OVERRIDE = stringPreferencesKey("direction_override")
+    val DIRECTION_OVERRIDE_SET_AT = longPreferencesKey("direction_override_set_at_millis")
 
     fun cache(direction: Direction) = stringPreferencesKey("cache_${direction.paramValue}")
 
@@ -30,20 +34,35 @@ private object PreferenceKeys {
 class TripsRepository(private val dataStore: DataStore<Preferences>) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun getDirectionOverride(): Direction? {
-        val raw = dataStore.data.first()[PreferenceKeys.DIRECTION_OVERRIDE] ?: return null
-        return Direction.fromParam(raw)
+    /**
+     * Null if never set, or if it was set during a *different* natural
+     * half-day period than [clock] currently reports — a manual swap
+     * means "show me the other leg for the rest of right now", not "pin
+     * this forever". Without this expiry, swapping in the evening (to
+     * BA) would silently persist into the next morning, still overriding
+     * what should naturally be AB again.
+     */
+    suspend fun getDirectionOverride(clock: Clock): Direction? = decodeOverride(dataStore.data.first(), clock)
+
+    fun observeDirectionOverride(clock: Clock): Flow<Direction?> =
+        dataStore.data.map { prefs -> decodeOverride(prefs, clock) }
+
+    private fun decodeOverride(prefs: Preferences, clock: Clock): Direction? {
+        val raw = prefs[PreferenceKeys.DIRECTION_OVERRIDE] ?: return null
+        val direction = Direction.fromParam(raw) ?: return null
+        val setAtMillis = prefs[PreferenceKeys.DIRECTION_OVERRIDE_SET_AT] ?: return null
+        val setAtClock = Clock.fixed(Instant.ofEpochMilli(setAtMillis), clock.zone)
+        return direction.takeIf { naturalDirection(setAtClock) == naturalDirection(clock) }
     }
 
-    fun observeDirectionOverride(): Flow<Direction?> =
-        dataStore.data.map { prefs -> prefs[PreferenceKeys.DIRECTION_OVERRIDE]?.let { Direction.fromParam(it) } }
-
-    suspend fun setDirectionOverride(direction: Direction?) {
+    suspend fun setDirectionOverride(direction: Direction?, clock: Clock) {
         dataStore.edit { prefs ->
             if (direction == null) {
                 prefs.remove(PreferenceKeys.DIRECTION_OVERRIDE)
+                prefs.remove(PreferenceKeys.DIRECTION_OVERRIDE_SET_AT)
             } else {
                 prefs[PreferenceKeys.DIRECTION_OVERRIDE] = direction.paramValue
+                prefs[PreferenceKeys.DIRECTION_OVERRIDE_SET_AT] = clock.millis()
             }
         }
     }

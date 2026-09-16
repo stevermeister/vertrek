@@ -83,7 +83,7 @@ class TripsViewModelTest {
     @Test
     fun `fresh cached data produces a Fresh body for the overridden direction`() = runTest {
         val repository = newRepository()
-        repository.setDirectionOverride(Direction.AB)
+        repository.setDirectionOverride(Direction.AB, fixedClock)
         repository.saveCached(
             Direction.AB,
             CachedTripsData(
@@ -108,7 +108,7 @@ class TripsViewModelTest {
     @Test
     fun `stale cached data produces a Stale body carrying its age`() = runTest {
         val repository = newRepository()
-        repository.setDirectionOverride(Direction.AB)
+        repository.setDirectionOverride(Direction.AB, fixedClock)
         val fetchedAt = fixedClock.instant().minusSeconds(5 * 60) // 5 minutes old -> Stale
         repository.saveCached(
             Direction.AB,
@@ -126,7 +126,7 @@ class TripsViewModelTest {
     @Test
     fun `no cache and no recorded failure produces NoData NEVER_FETCHED`() = runTest {
         val repository = newRepository()
-        repository.setDirectionOverride(Direction.AB)
+        repository.setDirectionOverride(Direction.AB, fixedClock)
 
         val viewModel = TripsViewModel(repository, clock = fixedClock)
         val state = viewModel.uiState.drop(1).first() as TripsUiState.Content
@@ -139,7 +139,7 @@ class TripsViewModelTest {
     @Test
     fun `a recorded auth failure produces NoData AUTH_REJECTED`() = runTest {
         val repository = newRepository()
-        repository.setDirectionOverride(Direction.AB)
+        repository.setDirectionOverride(Direction.AB, fixedClock)
         repository.setLastFailureReason(Direction.AB, NoDataReason.AUTH_REJECTED)
 
         val viewModel = TripsViewModel(repository, clock = fixedClock)
@@ -151,7 +151,7 @@ class TripsViewModelTest {
     @Test
     fun `a recorded network failure produces NoData NETWORK_DOWN`() = runTest {
         val repository = newRepository()
-        repository.setDirectionOverride(Direction.AB)
+        repository.setDirectionOverride(Direction.AB, fixedClock)
         repository.setLastFailureReason(Direction.AB, NoDataReason.NETWORK_DOWN)
 
         val viewModel = TripsViewModel(repository, clock = fixedClock)
@@ -163,7 +163,7 @@ class TripsViewModelTest {
     @Test
     fun `a successful fetch with zero trips is Empty, not NoData`() = runTest {
         val repository = newRepository()
-        repository.setDirectionOverride(Direction.AB)
+        repository.setDirectionOverride(Direction.AB, fixedClock)
         repository.saveCached(
             Direction.AB,
             CachedTripsData(direction = "ab", trips = emptyList(), fetchedAtEpochMillis = fixedClock.millis()),
@@ -178,7 +178,7 @@ class TripsViewModelTest {
     @Test
     fun `swapDirection flips the override and notifies the tile`() = runTest {
         val repository = newRepository()
-        repository.setDirectionOverride(Direction.AB)
+        repository.setDirectionOverride(Direction.AB, fixedClock)
         var tileNotified = false
         val viewModel =
             TripsViewModel(repository, clock = fixedClock, onDirectionChanged = { tileNotified = true })
@@ -190,14 +190,14 @@ class TripsViewModelTest {
         val afterSwap = viewModel.uiState.drop(1).first() as TripsUiState.Content
 
         assertEquals(Direction.BA, afterSwap.direction)
-        assertEquals(Direction.BA, repository.getDirectionOverride())
+        assertEquals(Direction.BA, repository.getDirectionOverride(fixedClock))
         assertTrue(tileNotified)
     }
 
     @Test
     fun `refresh enqueues work and flips isRefreshing on`() = runTest {
         val repository = newRepository()
-        repository.setDirectionOverride(Direction.AB)
+        repository.setDirectionOverride(Direction.AB, fixedClock)
         var refreshRequested = false
         val viewModel =
             TripsViewModel(repository, clock = fixedClock, onRefreshRequested = { refreshRequested = true })
@@ -220,7 +220,7 @@ class TripsViewModelTest {
     @Test
     fun `a cache write from elsewhere never triggers a refresh enqueue`() = runTest {
         val repository = newRepository()
-        repository.setDirectionOverride(Direction.AB)
+        repository.setDirectionOverride(Direction.AB, fixedClock)
         var enqueueCount = 0
         val viewModel =
             TripsViewModel(repository, clock = fixedClock, onRefreshRequested = { enqueueCount++ })
@@ -244,7 +244,7 @@ class TripsViewModelTest {
     @Test
     fun `calling refresh again while already refreshing enqueues only once`() = runTest {
         val repository = newRepository()
-        repository.setDirectionOverride(Direction.AB)
+        repository.setDirectionOverride(Direction.AB, fixedClock)
         var enqueueCount = 0
         val viewModel =
             TripsViewModel(repository, clock = fixedClock, onRefreshRequested = { enqueueCount++ })

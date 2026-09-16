@@ -40,7 +40,8 @@ class RefreshWorker(
     override suspend fun doWork(): Result {
         return try {
             val repository = TripsRepository(applicationContext.tripsDataStore)
-            val direction = resolveWorkDirection(inputData, repository.getDirectionOverride(), Clock.systemDefaultZone())
+            val clock = Clock.systemDefaultZone()
+            val direction = resolveWorkDirection(inputData, repository.getDirectionOverride(clock), clock)
 
             logActiveNetwork(applicationContext)
 
