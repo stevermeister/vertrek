@@ -425,6 +425,27 @@ This script only ever prints field **names** it found missing or new —
 never your API key, never request headers, never the actual response
 body (which is live train data for whatever route you query).
 
+### Sampling the live schedule (e.g. "how often are fewer than 2 direct trains available?")
+
+For questions about the real schedule — not the code — query NS
+directly rather than adding a diagnostic path to the deployed Worker.
+`scripts/sample-ns.mjs` queries NS's `/trips` endpoint with an explicit
+`dateTime` anchor across one or more time windows, in both directions,
+and reports how often fewer than 2 direct (`transfers == 0`) trains
+appear in the 5 trips NS returns:
+
+```bash
+NS_API_KEY=xxxx npm run sample:ns
+# or, tuned to your own route/windows/step:
+NS_API_KEY=xxxx STATION_A=ALMO STATION_B=ASD \
+  WINDOWS="07:00-08:30,17:00-18:30" INTERVAL_MINUTES=15 npm run sample:ns
+```
+
+Never deploys anything and never touches the Worker — it's a pure local
+NS API client, same key/safety rules as `verify:live` above (never logs
+the key, headers, or a full raw response — only departure time, track,
+and transfers count per trip).
+
 ## License
 
 [MIT](LICENSE) © Stepan Suvorov.
