@@ -28,6 +28,9 @@ export interface CompactTrip {
   track: string | null;
   cancelled: boolean;
   crowdForecast: CrowdForecast;
+  // 0 means a direct connection, no transfers. The tile prefers direct
+  // trips for its 2-row view; MainActivity shows everything unfiltered.
+  transfers: number;
 }
 
 export class NsApiError extends Error {
@@ -166,6 +169,7 @@ function toCompactTrip(trip: NsTrip): CompactTrip {
     track: origin?.actualTrack ?? origin?.plannedTrack ?? null,
     cancelled: isCancelled(trip),
     crowdForecast: reduceCrowdForecast(trip.legs),
+    transfers: trip.transfers,
   };
 }
 

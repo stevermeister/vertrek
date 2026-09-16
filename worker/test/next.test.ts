@@ -102,7 +102,7 @@ describe("GET /next auth", () => {
 });
 
 describe("GET /next", () => {
-  it("returns up to 4 compact trips for dir=ab, using the recorded NS fixture", async () => {
+  it("returns up to 5 compact trips for dir=ab, using the recorded NS fixture", async () => {
     mockNsTrips(env.STATION_A, env.STATION_B, fixture);
 
     const response = await authedFetch("https://worker.example/next?dir=ab");
@@ -124,8 +124,8 @@ describe("GET /next", () => {
     // Test env has STATION_A_SHORT/STATION_B_SHORT set — see vitest.config.ts.
     expect(json.fromStationShort).toBe(env.STATION_A_SHORT);
     expect(json.toStationShort).toBe(env.STATION_B_SHORT);
-    // The fixture has 7 trips — this proves the cap still trims, not just that 4 fit.
-    expect(json.trips).toHaveLength(4);
+    // The fixture has 7 trips — this proves the cap still trims, not just that 5 fit.
+    expect(json.trips).toHaveLength(5);
 
     const [first, second] = json.trips as Array<Record<string, unknown>>;
 
@@ -139,6 +139,7 @@ describe("GET /next", () => {
       track: "4b",
       cancelled: false,
       crowdForecast: "MEDIUM",
+      transfers: 0,
     });
 
     expect(second).toEqual({
@@ -148,7 +149,18 @@ describe("GET /next", () => {
       track: "4b",
       cancelled: true,
       crowdForecast: "UNKNOWN",
+      transfers: 0,
     });
+  });
+
+  it("passes the NS transfers count through verbatim, for the tile's direct-trip filter", async () => {
+    mockNsTrips(env.STATION_A, env.STATION_B, fixture);
+
+    const response = await authedFetch("https://worker.example/next?dir=ab");
+    const json = await response.json<{ trips: Array<{ transfers: number }> }>();
+
+    // trip-3 (index 2) is the fixture's only trip with a transfer.
+    expect(json.trips.map((t) => t.transfers)).toEqual([0, 0, 1, 0, 0]);
   });
 
   it("reports the planned departure time for a delayed trip, not the actual/adjusted one", async () => {
@@ -189,9 +201,9 @@ describe("GET /next", () => {
     const response = await authedFetch("https://worker.example/next?dir=ab");
     const json = await response.json<{ trips: Array<{ crowdForecast: string }> }>();
 
-    // trip-4 (index 3, the last trip inside the 4-trip cap) carries
+    // trip-4 (index 3, inside the 5-trip cap) carries
     // "UNRECOGNIZED_FUTURE_VALUE" on its leg. It must land here, not on
-    // trip-5/6/7 which the cap excludes entirely — otherwise this test
+    // trip-6/7 which the cap excludes entirely — otherwise this test
     // would pass without ever exercising the defensive-parsing branch.
     expect(json.trips[3]?.crowdForecast).toBe("UNKNOWN");
   });

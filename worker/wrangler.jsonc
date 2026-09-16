@@ -30,9 +30,12 @@
     // need a second NS call per request via the response's
     // scrollRequestForwardContext, which we've deliberately not built —
     // see the comment above fetchTrips() in worker/src/ns.ts. Raising this
-    // above 5 will not get you more trips. We show only 4 of those 5 —
-    // the watch row layout's own choice, not an NS limit.
-    "MAX_TRIPS": "4"
+    // above 5 will not get you more trips. Set to the NS cap itself: the
+    // tile only shows 2 direct (transfers==0) trips, a subset of what's
+    // returned, so it needs the widest available window to reliably find
+    // two — a narrower MAX_TRIPS risks an all-transfers or empty result
+    // purely because the direct ones happened to be outside a smaller cut.
+    "MAX_TRIPS": "5"
   }
   // Two secrets are set separately via `wrangler secret put` — never store
   // them here:

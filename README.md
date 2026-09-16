@@ -363,7 +363,8 @@ for 30 seconds per `dir`:
       "delayMinutes": 5,
       "track": "4b",
       "cancelled": false,
-      "crowdForecast": "MEDIUM"
+      "crowdForecast": "MEDIUM",
+      "transfers": 0
     }
   ]
 }
@@ -377,7 +378,10 @@ Setup step 2), falling back to the full name when the corresponding var
 is unset; only the tile header uses these, the main screen always uses
 the full names. `crowdForecast` is `LOW` | `MEDIUM` | `HIGH` | `UNKNOWN`:
 the NS API reports it per leg, so multi-leg trips are reduced to their
-busiest leg.
+busiest leg. `transfers` is NS's own count for that trip (0 = direct);
+the tile prefers direct trips for its 2-row view and falls back to
+trips with transfers only when no direct one is upcoming — MainActivity
+shows everything, unfiltered, regardless of `transfers`.
 
 All error responses are machine-readable JSON:
 
